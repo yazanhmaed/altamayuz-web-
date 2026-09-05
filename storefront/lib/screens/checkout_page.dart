@@ -1,4 +1,4 @@
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../cart/cart_controller.dart';
 import '../theme/app_theme.dart';
@@ -34,21 +34,38 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('submitPublicOrder');
-      await callable.call({
+      final db = FirebaseFirestore.instance;
+      final orderRef = db.collection('orders').doc();
+      final orderItems = cartController.value
+          .map((l) => {
+                'itemId': db.collection('_').doc().id,
+                'productId': l.product.id,
+                'productName': l.product.name,
+                'color': l.variant.color,
+                'size': l.size,
+                'quantity': l.quantity,
+                'sku': '${l.product.id}-${l.variant.color}-${l.size}',
+                'unitPrice': l.product.price,
+                'isPrimary': true,
+                'status': 'pending',
+              })
+          .toList();
+      await orderRef.set({
+        'id': orderRef.id,
         'customerName': _nameCtrl.text.trim(),
         'customerPhone': _phoneCtrl.text.trim(),
         'address': _cityCtrl.text.trim(),
         'area': _areaCtrl.text.trim(),
         'street': _streetCtrl.text.trim(),
-        'items': cartController.value
-            .map((l) => {
-                  'productId': l.product.id,
-                  'color': l.variant.color,
-                  'size': l.size,
-                  'quantity': l.quantity,
-                })
-            .toList(),
+        'destination': '',
+        'items': orderItems,
+        'qrCode': <String>[],
+        'total': cartController.total,
+        'status': 'pending',
+        'source': 'storefront',
+        'paymentMethod': 'cod',
+        'createdAt': FieldValue.serverTimestamp(),
+        'deliveryDate': '',
       });
       cartController.clear();
       if (!mounted) return;

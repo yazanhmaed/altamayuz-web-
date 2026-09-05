@@ -15,7 +15,10 @@ class CategoryProductsPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(category)),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('products_public').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('products')
+            .where('isActive', isEqualTo: true)
+            .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return ResponsiveCenter(
@@ -31,7 +34,11 @@ class CategoryProductsPage extends StatelessWidget {
           }
 
           final products = snapshot.data!.docs
-              .map((d) => PublicProductModel.fromMap(d.data() as Map<String, dynamic>))
+              .map((d) => PublicProductModel.fromProductDoc(
+                    d.id,
+                    d.data() as Map<String, dynamic>,
+                  ))
+              .whereType<PublicProductModel>()
               .where((p) => p.category == category)
               .toList();
 
