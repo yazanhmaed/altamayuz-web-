@@ -7,6 +7,7 @@ class ProductModel {
   final Map<String, Map<String, int>> stock; // color -> size -> qty
   final bool isActive;
   final bool isFeatured; // shown on storefront homepage hero/carousel
+  final String category; // single category, defaults to 'عام' (General)
   final int lowStockThreshold;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -20,6 +21,7 @@ class ProductModel {
     required this.stock,
     required this.isActive,
     this.isFeatured = false,
+    this.category = 'عام',
     required this.lowStockThreshold,
     required this.createdAt,
     required this.updatedAt,
@@ -41,6 +43,7 @@ class ProductModel {
     Map<String, Map<String, int>>? stock,
     bool? isActive,
     bool? isFeatured,
+    String? category,
     int? lowStockThreshold,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -54,6 +57,7 @@ class ProductModel {
       stock: stock ?? this.stock,
       isActive: isActive ?? this.isActive,
       isFeatured: isFeatured ?? this.isFeatured,
+      category: category ?? this.category,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
@@ -69,6 +73,7 @@ class ProductModel {
     'stock': stock,
     'isActive': isActive,
     'isFeatured': isFeatured,
+    'category': category,
     'lowStockThreshold': lowStockThreshold,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
@@ -91,6 +96,7 @@ class ProductModel {
       ),
       isActive: map['isActive'] as bool? ?? true,
       isFeatured: map['isFeatured'] as bool? ?? false,
+      category: (map['category'] as String?)?.trim().isNotEmpty == true ? map['category'] as String : 'عام',
       lowStockThreshold: (map['lowStockThreshold'] as num?)?.toInt() ?? 1,
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(map['updatedAt'] as String? ?? '') ?? DateTime.now(),

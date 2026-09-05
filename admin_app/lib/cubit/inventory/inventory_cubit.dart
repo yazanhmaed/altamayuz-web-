@@ -76,11 +76,21 @@ class InventoryCubit extends Cubit<InventoryState> {
   final nameCtrl = TextEditingController();
   final priceCtrl = TextEditingController();
   final lowStockCtrl = TextEditingController(text: '1');
+  final categoryCtrl = TextEditingController(text: 'عام');
+  bool addingNewCategory = false;
   final List<ColorFormRow> colorRows = [ColorFormRow()];
   final Map<String, XFile?> pendingColorImages = {}; // color -> newly picked, not yet uploaded
   bool isActive = true;
   bool isFeatured = false;
   ProductModel? editingProduct;
+
+  /// Distinct categories currently in use, derived live from the loaded
+  /// products cache — always includes the 'عام' (General) default so it's
+  /// available even before any product has been saved.
+  List<String> get availableCategories {
+    final set = <String>{'عام', ...products.map((p) => p.category)};
+    return set.toList()..sort();
+  }
 
   // ---- restock-only form state ----
   ProductModel? restockProduct;
@@ -124,6 +134,8 @@ class InventoryCubit extends Cubit<InventoryState> {
     nameCtrl.clear();
     priceCtrl.clear();
     lowStockCtrl.text = '1';
+    categoryCtrl.text = 'عام';
+    addingNewCategory = false;
     isActive = true;
     isFeatured = false;
     for (final row in colorRows) {
@@ -141,6 +153,8 @@ class InventoryCubit extends Cubit<InventoryState> {
     nameCtrl.text = product.name;
     priceCtrl.text = product.price.toString();
     lowStockCtrl.text = product.lowStockThreshold.toString();
+    categoryCtrl.text = product.category;
+    addingNewCategory = false;
     isActive = product.isActive;
     isFeatured = product.isFeatured;
 
@@ -207,6 +221,14 @@ class InventoryCubit extends Cubit<InventoryState> {
     emit(InventoryFormChanged());
   }
 
+  void toggleAddingNewCategory(bool value) {
+    addingNewCategory = value;
+    if (!value) {
+      categoryCtrl.clear();
+    }
+    emit(InventoryFormChanged());
+  }
+
   void pickColorImage(String color, XFile file) {
     pendingColorImages[color] = file;
     emit(InventoryFormChanged());
@@ -261,6 +283,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     }
 
     final now = DateTime.now();
+    final trimmedCategory = categoryCtrl.text.trim();
     return ProductModel(
       id: id,
       name: nameCtrl.text.trim(),
@@ -270,6 +293,7 @@ class InventoryCubit extends Cubit<InventoryState> {
       stock: stock,
       isActive: isActive,
       isFeatured: isFeatured,
+      category: trimmedCategory.isEmpty ? 'عام' : trimmedCategory,
       lowStockThreshold: int.tryParse(lowStockCtrl.text.trim()) ?? 1,
       createdAt: editingProduct?.createdAt ?? now,
       updatedAt: now,
@@ -557,6 +581,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     nameCtrl.dispose();
     priceCtrl.dispose();
     lowStockCtrl.dispose();
+    categoryCtrl.dispose();
     for (final row in colorRows) {
       row.dispose();
     }
