@@ -29,6 +29,7 @@ export const syncPublicProduct = onDocumentWritten(
       name: after.name,
       price: after.price,
       isFeatured: after.isFeatured ?? false,
+      category: after.category ?? "عام",
       variants,
       updatedAt: new Date().toISOString(),
     });

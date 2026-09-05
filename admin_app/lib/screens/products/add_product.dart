@@ -9,6 +9,10 @@ import '../../cubit/inventory/inventory_state.dart';
 import '../../data/product/product_model.dart';
 import '../../widgets/labeled.dart';
 
+/// Sentinel item value for the "+ new category" option in the category
+/// dropdown — never a legal category name itself.
+const _newCategorySentinel = '__new_category__';
+
 class AddProductScreen extends StatefulWidget {
   final ProductModel? product;
   const AddProductScreen({super.key, this.product});
@@ -59,6 +63,54 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   decoration: const InputDecoration(border: OutlineInputBorder()),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
                 ),
+              ),
+              const SizedBox(height: 12),
+              Labeled(
+                label: 'التصنيف',
+                child: cubit.addingNewCategory
+                    ? Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: cubit.categoryCtrl,
+                              autofocus: true,
+                              decoration: const InputDecoration(
+                                labelText: 'اسم التصنيف الجديد',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () => cubit.toggleAddingNewCategory(false),
+                            child: const Text('إلغاء'),
+                          ),
+                        ],
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: cubit.availableCategories.contains(cubit.categoryCtrl.text)
+                            ? cubit.categoryCtrl.text
+                            : null,
+                        decoration: const InputDecoration(border: OutlineInputBorder()),
+                        items: [
+                          for (final c in cubit.availableCategories)
+                            DropdownMenuItem(value: c, child: Text(c)),
+                          const DropdownMenuItem(
+                            value: _newCategorySentinel,
+                            child: Text('+ تصنيف جديد'),
+                          ),
+                        ],
+                        validator: (v) => (v == null || v.isEmpty) ? 'مطلوب' : null,
+                        onChanged: (value) {
+                          if (value == null) return;
+                          if (value == _newCategorySentinel) {
+                            cubit.toggleAddingNewCategory(true);
+                          } else {
+                            setState(() => cubit.categoryCtrl.text = value);
+                          }
+                        },
+                      ),
               ),
               const SizedBox(height: 12),
               Labeled(

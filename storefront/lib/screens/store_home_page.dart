@@ -4,9 +4,11 @@ import '../cart/cart_controller.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
+import '../widgets/cart_bar.dart';
+import '../widgets/product_card.dart';
 import '../widgets/ui_helpers.dart';
 import '../widgets/cart_sheet.dart';
-import 'checkout_page.dart';
+import 'category_products_page.dart';
 import 'product_detail_page.dart';
 
 class StoreHomePage extends StatefulWidget {
@@ -87,6 +89,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
           final featured = all.where((p) => p.isFeatured && p.isAvailable).toList();
           final hero = featured.isNotEmpty ? featured.first : null;
           final carousel = featured.length > 1 ? featured.sublist(1) : <PublicProductModel>[];
+          final categories = {for (final p in all) p.category}.toList()..sort();
 
           if (all.isEmpty) return const Center(child: Text('لا توجد منتجات متاحة حاليًا'));
 
@@ -115,6 +118,29 @@ class _StoreHomePageState extends State<StoreHomePage> {
                         ),
                       ),
                     ),
+                    if (_query.isEmpty)
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 44,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            itemCount: categories.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            itemBuilder: (context, i) => ActionChip(
+                              label: Text(categories[i]),
+                              backgroundColor: AppColors.surface,
+                              side: const BorderSide(color: AppColors.border),
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CategoryProductsPage(category: categories[i]),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     if (hero != null && _query.isEmpty)
                       SliverToBoxAdapter(child: _HeroBanner(product: hero)),
                     if (carousel.isNotEmpty && _query.isEmpty) ...[
@@ -133,7 +159,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                             itemCount: carousel.length,
                             separatorBuilder: (_, __) => const SizedBox(width: 12),
                             itemBuilder: (context, i) =>
-                                SizedBox(width: 150, child: _ProductCard(product: carousel[i])),
+                                SizedBox(width: 150, child: ProductCard(product: carousel[i])),
                           ),
                         ),
                       ),
@@ -162,7 +188,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                             crossAxisCount: columns, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.68,
                           ),
                           delegate: SliverChildBuilderDelegate(
-                            (context, i) => _ProductCard(product: filtered[i]),
+                            (context, i) => ProductCard(product: filtered[i]),
                             childCount: filtered.length,
                           ),
                         ),
@@ -174,7 +200,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
           );
         },
       ),
-      bottomSheet: const _CartBar(),
+      bottomSheet: const CartBar(),
     );
   }
 }
@@ -223,106 +249,6 @@ class _HeroBanner extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ProductCard extends StatelessWidget {
-  final PublicProductModel product;
-  const _ProductCard({required this.product});
-
-  @override
-  Widget build(BuildContext context) {
-    final isAvailable = product.isAvailable;
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailPage(product: product))),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.network(product.coverImage, fit: BoxFit.cover),
-                  if (!isAvailable)
-                    Container(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      alignment: Alignment.center,
-                      child: const Text('غير متوفر حاليًا', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-              child: Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Row(
-                children: [
-                  Text('${product.price.toStringAsFixed(0)} د.أ',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: AppColors.accent)),
-                  const Spacer(),
-                  ...product.variants.take(4).map(
-                    (v) => Padding(
-                      padding: const EdgeInsets.only(right: 3),
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.border),
-                          image: DecorationImage(image: NetworkImage(v.imageUrl), fit: BoxFit.cover),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CartBar extends StatelessWidget {
-  const _CartBar();
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<CartLine>>(
-      valueListenable: cartController,
-      builder: (context, cart, _) {
-        if (cart.isEmpty) return const SizedBox.shrink();
-        return Container(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
-          decoration: const BoxDecoration(color: AppColors.surface, border: Border(top: BorderSide(color: AppColors.border))),
-          child: ResponsiveCenter(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('${cartController.itemCount} قطعة', style: Theme.of(context).textTheme.bodySmall),
-                      Text('${cartController.total.toStringAsFixed(0)} د.أ', style: Theme.of(context).textTheme.titleMedium),
-                    ],
-                  ),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CheckoutPage())),
-                  child: const Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: Text('إتمام الطلب')),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
