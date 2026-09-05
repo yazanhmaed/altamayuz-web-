@@ -1,10 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:simple_barcode_scanner/simple_barcode_scanner.dart';
-
 import '../../data/order/order_model.dart';
 import '../../data/order/pick_result_model.dart';
+import '../../screens/orders/widgets/qr_scanner_screen.dart';
 import 'order_state.dart';
 
 class OrderCubit extends Cubit<OrderState> {
@@ -284,27 +283,18 @@ class OrderCubit extends Cubit<OrderState> {
   }) async {
     emit(OrderFormLoadChanged());
 
-    await SimpleBarcodeScanner.scanBarcode(
-      context,
-      barcodeAppBar: const BarcodeAppBar(
-        appBarTitle: 'مسح QR',
-        centerTitle: false,
-        enableBackButton: true,
-        backButtonIcon: Icon(Icons.arrow_back_ios),
-      ),
-      isShowFlashIcon: true,
-      delayMillis: 500,
-      cameraFace: CameraFace.back,
-      scanFormat: ScanFormat.ONLY_QR_CODE,
-    ).then((barcode) async {
-      if (barcode == null) return;
+    final barcode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+    );
+
+    if (barcode != null) {
       final code = barcode.split('=').last;
       final orderRef = _db.collection('orders').doc(order.id);
       await orderRef.update({
         'qrCode': [code],
       });
       order.qrCode = [code];
-    });
+    }
 
     emit(OrderFormChanged());
     if (context.mounted) {
