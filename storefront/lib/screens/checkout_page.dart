@@ -6,7 +6,12 @@ import '../utils/responsive.dart';
 import 'order_success_page.dart';
 
 class CheckoutPage extends StatefulWidget {
-  const CheckoutPage({super.key});
+  /// When set, checkout is a "buy now" purchase of this single item only —
+  /// the shared cart is neither read from nor modified. When null (the
+  /// normal "continue to checkout" flow), checkout reads and submits the
+  /// shared cart's contents as before.
+  final CartLine? buyNowItem;
+  const CheckoutPage({super.key, this.buyNowItem});
   @override
   State<CheckoutPage> createState() => _CheckoutPageState();
 }
@@ -19,6 +24,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final _areaCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
   bool _submitting = false;
+
+  /// Single source of truth for the order summary, total, and submission
+  /// payload — a "buy now" purchase of one item, or the shared cart.
+  List<CartLine> get _items => widget.buyNowItem != null ? [widget.buyNowItem!] : cartController.value;
+
+  double get _total => _items.fold(0.0, (sum, l) => sum + l.lineTotal);
 
   @override
   void dispose() {
@@ -41,7 +52,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         'address': _cityCtrl.text.trim(),
         'area': _areaCtrl.text.trim(),
         'street': _streetCtrl.text.trim(),
-        'items': cartController.value
+        'items': _items
             .map((l) => {
                   'productId': l.product.id,
                   'color': l.variant.color,
@@ -50,7 +61,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 })
             .toList(),
       });
-      cartController.clear();
+      // Only the shared cart's own checkout flow clears it — a "buy now"
+      // purchase never touches the cart, since it wasn't its source.
+      if (widget.buyNowItem == null) {
+        cartController.clear();
+      }
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const OrderSuccessPage()),
@@ -73,7 +88,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
           children: [
             Text('ملخص الطلب', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            ...cartController.value.map(
+            ..._items.map(
               (l) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -89,7 +104,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               children: [
                 const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.w700)),
                 const Spacer(),
-                Text('${cartController.total.toStringAsFixed(0)} د.أ',
+                Text('${_total.toStringAsFixed(0)} د.أ',
                     style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.accent)),
               ],
             ),
