@@ -2,8 +2,8 @@
 // ignore_for_file: type=lint
 //
 // Linked to Firebase project `altamayuz-web`. This app shares the SAME
-// Firebase project as admin_app/ so the storefront's products_public reads
-// and submitPublicOrder calls reach the same Firestore database and Cloud
+// Firebase project as admin_app/ so the storefront's `products` reads and
+// submitPublicOrder calls reach the same Firestore database and Cloud
 // Functions. Re-run `flutterfire configure` to regenerate.
 
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;

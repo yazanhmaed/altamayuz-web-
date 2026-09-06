@@ -1,4 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:developer';
+
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../cart/cart_controller.dart';
 import '../theme/app_theme.dart';
@@ -27,7 +29,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   /// Single source of truth for the order summary, total, and submission
   /// payload — a "buy now" purchase of one item, or the shared cart.
-  List<CartLine> get _items => widget.buyNowItem != null ? [widget.buyNowItem!] : cartController.value;
+  List<CartLine> get _items =>
+      widget.buyNowItem != null ? [widget.buyNowItem!] : cartController.value;
 
   double get _total => _items.fold(0.0, (sum, l) => sum + l.lineTotal);
 
@@ -45,27 +48,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      final db = FirebaseFirestore.instance;
-      final orderRef = db.collection('orders').doc();
-      final orderItems = cartController.value
-          .map((l) => {
-                'itemId': db.collection('_').doc().id,
-                'productId': l.product.id,
-                'productName': l.product.name,
-                'color': l.variant.color,
-                'size': l.size,
-                'quantity': l.quantity,
-                'sku': '${l.product.id}-${l.variant.color}-${l.size}',
-                'unitPrice': l.product.price,
-                'isPrimary': true,
-                'status': 'pending',
-              })
-          .toList();
-      await orderRef.set({
-        'id': orderRef.id,
+      // Both the cart flow and "buy now" submit through the SAME callable,
+      // which validates stock and deducts it atomically in one transaction.
+      // The storefront never writes the order document or touches `products`
+      // directly — it only sends what was ordered.
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('submitPublicOrder');
+      await callable.call({
         'customerName': _nameCtrl.text.trim(),
         'customerPhone': _phoneCtrl.text.trim(),
-        'destination': '',
         'address': _cityCtrl.text.trim(),
         'area': _areaCtrl.text.trim(),
         'street': _streetCtrl.text.trim(),
@@ -88,9 +79,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
         MaterialPageRoute(builder: (_) => const OrderSuccessPage()),
         (route) => route.isFirst,
       );
-    } catch (e) {
+    } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ، حاول مرة أخرى: $e')));
+      // The function reports the specific product/color/size that ran out
+      // in `message`; show it verbatim so the customer knows what failed.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'حدث خطأ، حاول مرة أخرى.')),
+      );
+      log(e.message ?? '');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('حدث خطأ، حاول مرة أخرى.')),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -110,7 +111,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(child: Text('${l.product.name} — ${l.variant.color} — مقاس ${l.size} × ${l.quantity}')),
+                    Expanded(
+                        child: Text(
+                            '${l.product.name} — ${l.variant.color} — مقاس ${l.size} × ${l.quantity}')),
                     Text('${l.lineTotal.toStringAsFixed(0)} د.أ'),
                   ],
                 ),
@@ -119,10 +122,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
             const Divider(),
             Row(
               children: [
-                const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.w700)),
+                const Text('الإجمالي',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
                 const Spacer(),
                 Text('${_total.toStringAsFixed(0)} د.أ',
-                    style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.accent)),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, color: AppColors.accent)),
               ],
             ),
           ],
@@ -140,7 +145,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
           TextFormField(
             controller: _nameCtrl,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(labelText: 'الاسم الكامل', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                labelText: 'الاسم الكامل', border: OutlineInputBorder()),
             validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
           ),
           const SizedBox(height: 12),
@@ -148,37 +154,47 @@ class _CheckoutPageState extends State<CheckoutPage> {
             controller: _phoneCtrl,
             keyboardType: TextInputType.phone,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(labelText: 'رقم الهاتف', border: OutlineInputBorder()),
-            validator: (v) => (v == null || v.trim().length < 9) ? 'الرقم غير مكتمل' : null,
+            decoration: const InputDecoration(
+                labelText: 'رقم الهاتف', border: OutlineInputBorder()),
+            validator: (v) =>
+                (v == null || v.trim().length < 9) ? 'الرقم غير مكتمل' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _cityCtrl,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(labelText: 'المدينة', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                labelText: 'المدينة', border: OutlineInputBorder()),
             validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _areaCtrl,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(labelText: 'المنطقة', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                labelText: 'المنطقة', border: OutlineInputBorder()),
             validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _streetCtrl,
-            decoration: const InputDecoration(labelText: 'تفاصيل العنوان (اختياري)', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                labelText: 'تفاصيل العنوان (اختياري)',
+                border: OutlineInputBorder()),
           ),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+                color: AppColors.accentSoft,
+                borderRadius: BorderRadius.circular(12)),
             child: const Row(
               children: [
                 Icon(Icons.local_shipping_outlined, color: AppColors.accent),
                 SizedBox(width: 10),
-                Expanded(child: Text('الدفع كاش عند استلام الطلب — لا حاجة للدفع أونلاين.')),
+                Expanded(
+                    child: Text(
+                        'الدفع كاش عند استلام الطلب — لا حاجة للدفع أونلاين.')),
               ],
             ),
           ),
@@ -186,7 +202,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
           FilledButton(
             onPressed: _submitting ? null : _submit,
             child: _submitting
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
                 : const Text('تأكيد الطلب'),
           ),
         ],
@@ -207,7 +227,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 3, child: SingleChildScrollView(child: _buildForm(context))),
+                    Expanded(
+                        flex: 3,
+                        child:
+                            SingleChildScrollView(child: _buildForm(context))),
                     const SizedBox(width: 24),
                     Expanded(flex: 2, child: _buildSummary(context)),
                   ],
@@ -216,7 +239,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
             }
             return ListView(
               padding: const EdgeInsets.all(16),
-              children: [_buildSummary(context), const SizedBox(height: 20), _buildForm(context)],
+              children: [
+                _buildSummary(context),
+                const SizedBox(height: 20),
+                _buildForm(context)
+              ],
             );
           },
         ),

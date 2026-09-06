@@ -7,28 +7,19 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == "YOUR_ADMIN_UID";
     }
 
-    // The storefront reads products directly (no products_public mirror, since
-    // Cloud Functions are not deployed). Anyone may read; only the owner writes.
+    // The storefront reads products directly. Anyone may read; only the owner
+    // writes (admin app). Stock deduction happens server-side in the
+    // submitPublicOrder Cloud Function, which uses the Admin SDK and bypasses
+    // these rules.
     match /products/{productId} {
       allow read: if true;
       allow write: if isOwner();
     }
 
+    // Orders are created only by the submitPublicOrder Cloud Function (Admin
+    // SDK) or the owner. No client — storefront included — writes here directly.
     match /orders/{orderId} {
-      allow read, update, delete: if isOwner();
-
-      // Storefront customers may only create a pending cash-on-delivery order.
-      allow create: if request.resource.data.source == "storefront"
-                    && request.resource.data.status == "pending"
-                    && request.resource.data.paymentMethod == "cod"
-                    && request.resource.data.customerName is string
-                    && request.resource.data.customerName.size() > 0
-                    && request.resource.data.customerPhone is string
-                    && request.resource.data.customerPhone.size() >= 9
-                    && request.resource.data.items is list
-                    && request.resource.data.items.size() > 0
-                    && request.resource.data.total is number
-                    && request.resource.data.total >= 0;
+      allow read, write: if isOwner();
     }
 
     match /settings/{docId} {

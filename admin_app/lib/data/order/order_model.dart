@@ -177,7 +177,10 @@ class OrderModel {
     'street': street,
     'items': items.map((e) => e.toMap()).toList(),
     'qrCode': qrCode,
-    'createdAt': createdAt.toIso8601String(),
+    // Canonical stored type for `createdAt` is a Firestore Timestamp, matching
+    // storefront orders (submitPublicOrder). `fromMap` still reads the legacy
+    // ISO-string form via _parseDate, so old documents load unchanged.
+    'createdAt': Timestamp.fromDate(createdAt),
     'deliveryDate': deliveryDate,
     'status': status.englishName,
     'source': source,

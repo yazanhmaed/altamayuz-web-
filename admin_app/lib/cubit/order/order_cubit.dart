@@ -114,10 +114,12 @@ class OrderCubit extends Cubit<OrderState> {
     );
   }
 
-  /// Creates a brand-new order, deducting stock immediately in a single
-  /// transaction. Quantities are aggregated per product/color/size first so
-  /// each product document only ever receives one `tx.update()` call — the
-  /// same anti-clobber pattern used when restocking returns.
+  /// Saves an order and keeps inventory in sync in a single transaction:
+  /// a new order deducts every ordered unit; an edited order moves only the
+  /// net delta vs. what was previously stored. Quantities are aggregated per
+  /// product/color/size first so each product document only ever receives one
+  /// `tx.update()` call — the same anti-clobber pattern used when restocking
+  /// returns.
   Future<void> submitOrder() async {
     if (customerNameCtrl.text.trim().isEmpty || customerPhoneCtrl.text.trim().isEmpty) {
       emit(OrderError('اسم الزبون ورقم الهاتف مطلوبان.'));
@@ -184,7 +186,93 @@ class OrderCubit extends Cubit<OrderState> {
           tx.set(orderRef, order.toMap());
         });
       } else {
-        await orderRef.set(order.toMap());
+        // Editing an existing order: stock was already deducted when the order
+        // was first created, so we must move only the NET DELTA per
+        // product/color/size — deduct where the new quantity is higher,
+        // restore where it is lower. A plain `.set()` here would silently
+        // desync inventory. Delta is aggregated per product so each product
+        // doc gets exactly one tx.update(), the same anti-clobber pattern used
+        // for order creation and return-restocking. Do NOT "simplify" this
+        // back into a bare set().
+        await _db.runTransaction((tx) async {
+          // ---- reads first (Firestore requires all reads before any write) ----
+          final orderSnap = await tx.get(orderRef);
+          if (!orderSnap.exists) {
+            throw Exception('الطلب غير موجود.');
+          }
+          final storedOrder = OrderModel.fromMap(orderSnap.data()!);
+
+          // A returned order already gave its stock back; leave inventory
+          // untouched and just persist the edited fields.
+          if (storedOrder.status == OrderStatus.returned) {
+            tx.set(orderRef, order.toMap());
+            return;
+          }
+
+          // net delta: + for extra units to deduct, - for units to restore.
+          final Map<String, Map<String, Map<String, int>>> delta = {};
+          void bump(String p, String c, String s, int q) {
+            delta
+                .putIfAbsent(p, () => {})
+                .putIfAbsent(c, () => {})
+                .update(s, (v) => v + q, ifAbsent: () => q);
+          }
+          for (final item in storedOrder.items) {
+            bump(item.productId, item.color, item.size, -item.quantity);
+          }
+          for (final item in order.items) {
+            bump(item.productId, item.color, item.size, item.quantity);
+          }
+          // drop variants whose quantity did not change
+          delta.forEach((_, colors) {
+            colors.forEach((_, sizes) => sizes.removeWhere((_, q) => q == 0));
+          });
+          delta.removeWhere((_, colors) {
+            colors.removeWhere((_, sizes) => sizes.isEmpty);
+            return colors.isEmpty;
+          });
+
+          final Map<String, Map<String, dynamic>> productData = {};
+          for (final productId in delta.keys) {
+            final ref = _db.collection('products').doc(productId);
+            final snap = await tx.get(ref);
+            if (!snap.exists) {
+              throw Exception('المنتج ($productId) غير موجود.');
+            }
+            productData[productId] = Map<String, dynamic>.from(snap.data()!);
+          }
+
+          // ---- writes ----
+          for (final productId in delta.keys) {
+            final ref = _db.collection('products').doc(productId);
+            final data = productData[productId]!;
+            final stock = Map<String, dynamic>.from(data['stock'] as Map? ?? {});
+
+            for (final colorEntry in delta[productId]!.entries) {
+              final color = colorEntry.key;
+              final colorMap =
+                  Map<String, dynamic>.from(stock[color] ?? <String, dynamic>{});
+              for (final sizeEntry in colorEntry.value.entries) {
+                final current = (colorMap[sizeEntry.key] as num?)?.toInt() ?? 0;
+                final remaining = current - sizeEntry.value; // subtract delta
+                if (remaining < 0) {
+                  throw Exception(
+                    'الكمية غير كافية للمنتج (${data['name']}) - $color - ${sizeEntry.key}.',
+                  );
+                }
+                colorMap[sizeEntry.key] = remaining;
+              }
+              stock[color] = colorMap;
+            }
+
+            tx.update(ref, {
+              'stock': stock,
+              'updatedAt': DateTime.now().toIso8601String(),
+            });
+          }
+
+          tx.set(orderRef, order.toMap());
+        });
       }
 
       final index = orders.indexWhere((o) => o.id == order.id);
