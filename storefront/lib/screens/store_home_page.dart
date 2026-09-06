@@ -53,9 +53,11 @@ class _StoreHomePageState extends State<StoreHomePage> {
                     left: 6,
                     child: Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(
+                          color: AppColors.accent, shape: BoxShape.circle),
                       child: Text('${cartController.itemCount}',
-                          style: const TextStyle(color: Colors.white, fontSize: 10)),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 10)),
                     ),
                   ),
               ],
@@ -75,7 +77,10 @@ class _StoreHomePageState extends State<StoreHomePage> {
               child: GridView.builder(
                 padding: const EdgeInsets.all(16),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.68,
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: 0.68,
                 ),
                 itemCount: 6,
                 itemBuilder: (_, __) => const ProductCardSkeleton(),
@@ -92,13 +97,20 @@ class _StoreHomePageState extends State<StoreHomePage> {
               .toList();
           final filtered = _query.isEmpty
               ? all
-              : all.where((p) => p.name.toLowerCase().contains(_query.toLowerCase())).toList();
-          final featured = all.where((p) => p.isFeatured && p.isAvailable).toList();
+              : all
+                  .where((p) =>
+                      p.name.toLowerCase().contains(_query.toLowerCase()))
+                  .toList();
+          final featured =
+              all.where((p) => p.isFeatured && p.isAvailable).toList();
           final hero = featured.isNotEmpty ? featured.first : null;
-          final carousel = featured.length > 1 ? featured.sublist(1) : <PublicProductModel>[];
+          final carousel = featured.length > 1
+              ? featured.sublist(1)
+              : <PublicProductModel>[];
           final categories = {for (final p in all) p.category}.toList()..sort();
 
-          if (all.isEmpty) return const Center(child: Text('لا توجد منتجات متاحة حاليًا'));
+          if (all.isEmpty)
+            return const Center(child: Text('لا توجد منتجات متاحة حاليًا'));
 
           return ResponsiveCenter(
             child: LayoutBuilder(
@@ -119,7 +131,8 @@ class _StoreHomePageState extends State<StoreHomePage> {
                             fillColor: AppColors.surface,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: AppColors.border),
+                              borderSide:
+                                  const BorderSide(color: AppColors.border),
                             ),
                           ),
                         ),
@@ -133,7 +146,8 @@ class _StoreHomePageState extends State<StoreHomePage> {
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                             itemCount: categories.length,
-                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 8),
                             itemBuilder: (context, i) => ActionChip(
                               label: Text(categories[i]),
                               backgroundColor: AppColors.surface,
@@ -141,7 +155,8 @@ class _StoreHomePageState extends State<StoreHomePage> {
                               onPressed: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => CategoryProductsPage(category: categories[i]),
+                                  builder: (_) => CategoryProductsPage(
+                                      category: categories[i]),
                                 ),
                               ),
                             ),
@@ -154,7 +169,8 @@ class _StoreHomePageState extends State<StoreHomePage> {
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-                          child: Text('الأكثر تميزًا', style: Theme.of(context).textTheme.titleMedium),
+                          child: Text('الأكثر تميزًا',
+                              style: Theme.of(context).textTheme.titleMedium),
                         ),
                       ),
                       SliverToBoxAdapter(
@@ -164,9 +180,11 @@ class _StoreHomePageState extends State<StoreHomePage> {
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             itemCount: carousel.length,
-                            separatorBuilder: (_, __) => const SizedBox(width: 12),
-                            itemBuilder: (context, i) =>
-                                SizedBox(width: 150, child: ProductCard(product: carousel[i])),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 12),
+                            itemBuilder: (context, i) => SizedBox(
+                                width: 150,
+                                child: ProductCard(product: carousel[i])),
                           ),
                         ),
                       ),
@@ -191,8 +209,12 @@ class _StoreHomePageState extends State<StoreHomePage> {
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                         sliver: SliverGrid(
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: columns, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.68,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: columns,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                            childAspectRatio: 0.68,
                           ),
                           delegate: SliverChildBuilderDelegate(
                             (context, i) => ProductCard(product: filtered[i]),
@@ -207,7 +229,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
           );
         },
       ),
-      bottomSheet: const CartBar(),
+      // bottomSheet: const CartBar(),
     );
   }
 }
@@ -219,7 +241,10 @@ class _HeroBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailPage(product: product))),
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => ProductDetailPage(product: product))),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         height: 320,
@@ -237,7 +262,10 @@ class _HeroBanner extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.65)],
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.65)
+                  ],
                   stops: const [0.4, 1],
                 ),
               ),
@@ -248,14 +276,26 @@ class _HeroBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(product.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+                  Text(product.name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text('${product.price.toStringAsFixed(0)} د.أ', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                  Text('${product.price.toStringAsFixed(0)} د.أ',
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 16)),
                   const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-                    child: const Text('تسوّق الآن', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10)),
+                    child: const Text('تسوّق الآن',
+                        style: TextStyle(
+                            color: AppColors.accent,
+                            fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
