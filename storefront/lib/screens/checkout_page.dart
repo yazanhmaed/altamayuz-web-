@@ -54,17 +54,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
         'id': orderRef.id,
         'customerName': _nameCtrl.text.trim(),
         'customerPhone': _phoneCtrl.text.trim(),
+        'destination': '',
         'address': _cityCtrl.text.trim(),
         'area': _areaCtrl.text.trim(),
         'street': _streetCtrl.text.trim(),
-        'destination': '',
         'items': orderItems,
         'qrCode': <String>[],
         'total': cartController.total,
         'status': 'pending',
         'source': 'storefront',
         'paymentMethod': 'cod',
-        'createdAt': FieldValue.serverTimestamp(),
+        // Admin app parses this with DateTime.tryParse, so it must be an ISO
+        // string (matching OrderModel.toMap), not a Firestore Timestamp.
+        'createdAt': DateTime.now().toIso8601String(),
         'deliveryDate': '',
       });
       cartController.clear();
