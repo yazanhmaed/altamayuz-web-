@@ -100,40 +100,32 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           }).toList(),
         ),
         const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _selectedSize == null
-                    ? null
-                    : () {
-                        cartController.add(product, _selectedVariant, _selectedSize!);
-                        showAddedToCartToast(context, product.name);
-                      },
-                child: const Text('إضافة للسلة'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                onPressed: _selectedSize == null
-                    ? null
-                    : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CheckoutPage(
-                              buyNowItem: CartLine(
-                                product: product,
-                                variant: _selectedVariant,
-                                size: _selectedSize!,
-                              ),
-                            ),
-                          ),
+        OutlinedButton(
+          onPressed: _selectedSize == null
+              ? null
+              : () {
+                  cartController.add(product, _selectedVariant, _selectedSize!);
+                  showAddedToCartToast(context, product.name);
+                },
+          child: const Text('إضافة للسلة'),
+        ),
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: _selectedSize == null
+              ? null
+              : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CheckoutPage(
+                        buyNowItem: CartLine(
+                          product: product,
+                          variant: _selectedVariant,
+                          size: _selectedSize!,
                         ),
-                child: const Text('اشترِ الآن'),
-              ),
-            ),
-          ],
+                      ),
+                    ),
+                  ),
+          child: const Text('اشترِ الآن'),
         ),
       ],
     );
