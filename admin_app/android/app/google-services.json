@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1076327409181",
+    "project_id": "altamayuz-web",
+    "storage_bucket": "altamayuz-web.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1076327409181:android:e8278cd457f43dc93888f4",
+        "android_client_info": {
+          "package_name": "com.altamayuz.admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMqVAnFgfHKzO9Mk_qUP54JGPo89AjYGI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

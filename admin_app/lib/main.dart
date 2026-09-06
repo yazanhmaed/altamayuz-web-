@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -10,13 +11,20 @@ import 'firebase_options.dart';
 import 'screens/home_screen.dart';
 
 Future<void> registerOwnerToken() async {
-  await FirebaseMessaging.instance.requestPermission();
-  final token = await FirebaseMessaging.instance.getToken();
-  if (token != null) {
-    await FirebaseFirestore.instance
-        .collection('settings')
-        .doc('owner')
-        .set({'fcmToken': token}, SetOptions(merge: true));
+  // Web push needs a VAPID key + service worker that aren't configured yet,
+  // so owner-token registration is limited to mobile for now.
+  if (kIsWeb) return;
+  try {
+    await FirebaseMessaging.instance.requestPermission();
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null) {
+      await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('owner')
+          .set({'fcmToken': token}, SetOptions(merge: true));
+    }
+  } catch (e) {
+    debugPrint('registerOwnerToken failed: $e');
   }
 }
 

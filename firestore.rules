@@ -2,23 +2,37 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Replace with the Firebase Auth UID of the store owner (admin_app login).
     function isOwner() {
       return request.auth != null && request.auth.uid == "YOUR_ADMIN_UID";
     }
 
+    // The storefront reads products directly (no products_public mirror, since
+    // Cloud Functions are not deployed). Anyone may read; only the owner writes.
     match /products/{productId} {
-      allow read, write: if isOwner();
-    }
-    match /orders/{orderId} {
-      allow read, write: if isOwner();
-    }
-    match /settings/{docId} {
-      allow read, write: if isOwner();
+      allow read: if true;
+      allow write: if isOwner();
     }
 
-    match /products_public/{productId} {
-      allow read: if true;
-      allow write: if false;
+    match /orders/{orderId} {
+      allow read, update, delete: if isOwner();
+
+      // Storefront customers may only create a pending cash-on-delivery order.
+      allow create: if request.resource.data.source == "storefront"
+                    && request.resource.data.status == "pending"
+                    && request.resource.data.paymentMethod == "cod"
+                    && request.resource.data.customerName is string
+                    && request.resource.data.customerName.size() > 0
+                    && request.resource.data.customerPhone is string
+                    && request.resource.data.customerPhone.size() >= 9
+                    && request.resource.data.items is list
+                    && request.resource.data.items.size() > 0
+                    && request.resource.data.total is number
+                    && request.resource.data.total >= 0;
+    }
+
+    match /settings/{docId} {
+      allow read, write: if isOwner();
     }
   }
 }

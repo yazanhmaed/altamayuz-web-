@@ -16,6 +16,9 @@ class CartBar extends StatelessWidget {
       builder: (context, cart, _) {
         if (cart.isEmpty) return const SizedBox.shrink();
         return Container(
+          // Scaffold.bottomSheet hands down an unbounded width; pin it to the
+          // screen width so ResponsiveCenter/Row get bounded constraints.
+          width: MediaQuery.sizeOf(context).width,
           padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
           decoration: const BoxDecoration(color: AppColors.surface, border: Border(top: BorderSide(color: AppColors.border))),
           child: ResponsiveCenter(
@@ -31,7 +34,7 @@ class CartBar extends StatelessWidget {
                     ],
                   ),
                 ),
-                FilledButton(
+                ElevatedButton(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CheckoutPage())),
                   child: const Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: Text('إتمام الطلب')),
                 ),

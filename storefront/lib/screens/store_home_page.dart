@@ -65,7 +65,10 @@ class _StoreHomePageState extends State<StoreHomePage> {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('products_public').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('products')
+            .where('isActive', isEqualTo: true)
+            .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return ResponsiveCenter(
@@ -81,7 +84,11 @@ class _StoreHomePageState extends State<StoreHomePage> {
           }
 
           final all = snapshot.data!.docs
-              .map((d) => PublicProductModel.fromMap(d.data() as Map<String, dynamic>))
+              .map((d) => PublicProductModel.fromProductDoc(
+                    d.id,
+                    d.data() as Map<String, dynamic>,
+                  ))
+              .whereType<PublicProductModel>()
               .toList();
           final filtered = _query.isEmpty
               ? all
@@ -216,37 +223,44 @@ class _HeroBanner extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         height: 320,
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          image: DecorationImage(image: NetworkImage(product.coverImage), fit: BoxFit.cover),
+          color: AppColors.border,
         ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.transparent, Colors.black.withValues(alpha: 0.65)],
-              stops: const [0.4, 1],
-            ),
-          ),
-          alignment: Alignment.bottomRight,
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(product.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text('${product.price.toStringAsFixed(0)} د.أ', style: const TextStyle(color: Colors.white, fontSize: 16)),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-                child: const Text('تسوّق الآن', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700)),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            StoreImage(url: product.coverImage),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.65)],
+                  stops: const [0.4, 1],
+                ),
               ),
-            ],
-          ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(product.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text('${product.price.toStringAsFixed(0)} د.أ', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                    child: const Text('تسوّق الآن', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

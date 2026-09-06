@@ -39,11 +39,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           duration: const Duration(milliseconds: 280),
           switchInCurve: Curves.easeOut,
           transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
-          child: Image.network(
-            _selectedVariant.imageUrl,
+          child: StoreImage(
             key: ValueKey(_selectedVariant.color),
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const ColoredBox(color: AppColors.border),
+            url: _selectedVariant.imageUrl,
           ),
         ),
       ),
@@ -75,7 +73,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: isSelected ? AppColors.accent : AppColors.border, width: isSelected ? 2 : 1),
                   ),
-                  child: ClipRRect(borderRadius: BorderRadius.circular(7), child: Image.network(v.imageUrl, fit: BoxFit.cover)),
+                  child: ClipRRect(borderRadius: BorderRadius.circular(7), child: StoreImage(url: v.imageUrl)),
                 ),
               ),
             );

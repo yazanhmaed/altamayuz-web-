@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/public_product_model.dart';
 import '../screens/product_detail_page.dart';
 import '../theme/app_theme.dart';
+import 'ui_helpers.dart';
 
 class ProductCard extends StatelessWidget {
   final PublicProductModel product;
@@ -21,7 +22,7 @@ class ProductCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.network(product.coverImage, fit: BoxFit.cover),
+                  StoreImage(url: product.coverImage),
                   if (!isAvailable)
                     Container(
                       color: Colors.black.withValues(alpha: 0.45),
@@ -50,9 +51,10 @@ class ProductCard extends StatelessWidget {
                         height: 12,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
+                          color: AppColors.border,
                           border: Border.all(color: AppColors.border),
-                          image: DecorationImage(image: NetworkImage(v.imageUrl), fit: BoxFit.cover),
                         ),
+                        child: ClipOval(child: StoreImage(url: v.imageUrl)),
                       ),
                     ),
                   ),

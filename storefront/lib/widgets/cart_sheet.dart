@@ -3,6 +3,7 @@ import '../cart/cart_controller.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../screens/checkout_page.dart';
+import 'ui_helpers.dart';
 
 class CartSheet extends StatelessWidget {
   const CartSheet({super.key});
@@ -53,7 +54,11 @@ class CartSheet extends StatelessWidget {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                child: Image.network(line.variant.imageUrl, width: 56, height: 56, fit: BoxFit.cover),
+                                child: SizedBox(
+                                  width: 56,
+                                  height: 56,
+                                  child: StoreImage(url: line.variant.imageUrl),
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(

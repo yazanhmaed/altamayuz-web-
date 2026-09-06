@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum OrderStatus { pending, shipped, completed, returned }
 
 extension OrderStatusX on OrderStatus {
@@ -8,6 +10,15 @@ enum ItemStatus { pending, delivered, returned }
 
 extension ItemStatusX on ItemStatus {
   String get englishName => name;
+}
+
+/// Orders may store `createdAt` as an ISO string (admin app, storefront) or as
+/// a Firestore [Timestamp] (older storefront orders). Accept both.
+DateTime _parseDate(dynamic value) {
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+  return DateTime.now();
 }
 
 class OrderItem {
@@ -185,7 +196,7 @@ class OrderModel {
           .map((e) => OrderItem.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList(),
       qrCode: List<String>.from(map['qrCode'] ?? []),
-      createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: _parseDate(map['createdAt']),
       deliveryDate: map['deliveryDate'] as String? ?? '',
       status: OrderStatus.values.firstWhere(
         (s) => s.englishName == map['status'],

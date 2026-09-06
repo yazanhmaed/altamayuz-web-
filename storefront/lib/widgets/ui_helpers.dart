@@ -47,6 +47,41 @@ class _ProductCardSkeletonState extends State<ProductCardSkeleton> with SingleTi
   }
 }
 
+/// [Image.network] that degrades gracefully when the URL is missing or fails
+/// to load (some products have no image yet), instead of throwing during build.
+///
+/// On web it prefers rendering an HTML `<img>` element
+/// ([WebHtmlElementStrategy.prefer]) so Firebase Storage images load even
+/// though the bucket sends no CORS headers — a plain byte fetch would be
+/// blocked by the browser.
+class StoreImage extends StatelessWidget {
+  final String url;
+  final BoxFit fit;
+  const StoreImage({super.key, required this.url, this.fit = BoxFit.cover});
+
+  @override
+  Widget build(BuildContext context) {
+    if (url.isEmpty) return const _ImagePlaceholder();
+    return Image.network(
+      url,
+      fit: fit,
+      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+      errorBuilder: (_, __, ___) => const _ImagePlaceholder(),
+    );
+  }
+}
+
+class _ImagePlaceholder extends StatelessWidget {
+  const _ImagePlaceholder();
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: AppColors.border,
+      child: Center(child: Icon(Icons.image_not_supported_outlined, color: Colors.white54)),
+    );
+  }
+}
+
 void showAddedToCartToast(BuildContext context, String productName) {
   final overlay = Overlay.of(context);
   late OverlayEntry entry;
