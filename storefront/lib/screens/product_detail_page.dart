@@ -4,6 +4,7 @@ import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/ui_helpers.dart';
+import 'checkout_page.dart';
 
 class ProductDetailPage extends StatefulWidget {
   final PublicProductModel product;
@@ -97,14 +98,32 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           }).toList(),
         ),
         const SizedBox(height: 24),
-        FilledButton(
+        OutlinedButton(
           onPressed: _selectedSize == null
               ? null
               : () {
                   cartController.add(product, _selectedVariant, _selectedSize!);
                   showAddedToCartToast(context, product.name);
                 },
-          child: Text(_selectedSize == null ? 'اختر المقاس أولًا' : 'إضافة للسلة'),
+          child: const Text('إضافة للسلة'),
+        ),
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: _selectedSize == null
+              ? null
+              : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CheckoutPage(
+                        buyNowItem: CartLine(
+                          product: product,
+                          variant: _selectedVariant,
+                          size: _selectedSize!,
+                        ),
+                      ),
+                    ),
+                  ),
+          child: const Text('اشترِ الآن'),
         ),
       ],
     );
