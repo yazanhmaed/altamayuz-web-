@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../config/store_info.dart';
 import '../theme/app_theme.dart';
@@ -21,19 +22,22 @@ class SocialIconsRow extends StatelessWidget {
       mainAxisAlignment: alignment,
       children: [
         _SocialIcon(
-          icon: Icons.facebook,
+          icon:
+              const FaIcon(FontAwesomeIcons.facebook, color: AppColors.accent),
           label: 'فيسبوك',
           onTap: () => openExternalUrl(facebookUrl),
         ),
         const SizedBox(width: 8),
         _SocialIcon(
-          icon: Icons.camera_alt_outlined,
+          icon:
+              const FaIcon(FontAwesomeIcons.instagram, color: AppColors.accent),
           label: 'إنستغرام',
           onTap: () => openExternalUrl(instagramUrl),
         ),
         const SizedBox(width: 8),
         _SocialIcon(
-          icon: Icons.chat_outlined,
+          icon:
+              const FaIcon(FontAwesomeIcons.whatsapp, color: AppColors.accent),
           label: 'واتساب',
           onTap: () => openExternalUrl('https://wa.me/$whatsappPhone'),
         ),
@@ -43,17 +47,18 @@ class SocialIconsRow extends StatelessWidget {
 }
 
 class _SocialIcon extends StatelessWidget {
-  final IconData icon;
+  final Widget icon;
   final String label;
   final VoidCallback onTap;
-  const _SocialIcon({required this.icon, required this.label, required this.onTap});
+  const _SocialIcon(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onTap,
       tooltip: label,
-      icon: Icon(icon, color: AppColors.accent),
+      icon: icon,
       style: IconButton.styleFrom(
         backgroundColor: AppColors.bg,
         shape: RoundedRectangleBorder(

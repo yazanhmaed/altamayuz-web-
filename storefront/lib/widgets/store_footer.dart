@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../config/store_info.dart';
 import '../screens/about_page.dart';
+import '../screens/categories_page.dart';
 import '../screens/category_products_page.dart';
 import '../screens/contact_page.dart';
+import '../screens/shipping_policy_page.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import 'social_icons_row.dart';
 
-/// Home-screen footer: section links, social icons, delivery policy and
-/// copyright. Rendered once as the final sliver of the home `CustomScrollView`
+/// Home-screen footer: section links (incl. the shipping policy page), social
+/// icons and copyright. Rendered once as the final sliver of the home `CustomScrollView`
 /// — not reused on other screens (they have back navigation already).
 class StoreFooter extends StatelessWidget {
   const StoreFooter({super.key});
@@ -31,23 +33,25 @@ class StoreFooter extends StatelessWidget {
                 spacing: 4,
                 runSpacing: 4,
                 children: [
+                  // _FooterLink(
+                  //   label: 'الرئيسية',
+                  //   // Footer only exists on the home screen; if somehow reached
+                  //   // deeper in the stack this returns to the first route,
+                  //   // otherwise it's a harmless no-op.
+                  //   onTap: () =>
+                  //       Navigator.of(context).popUntil((r) => r.isFirst),
+                  // ),
                   _FooterLink(
-                    label: 'الرئيسية',
-                    // Footer only exists on the home screen; if somehow reached
-                    // deeper in the stack this returns to the first route,
-                    // otherwise it's a harmless no-op.
-                    onTap: () =>
-                        Navigator.of(context).popUntil((r) => r.isFirst),
-                  ),
-                  const _FooterLink(
-                    label: 'الأقسام',
-                    // Intentionally inert: the category chip row lives in a
-                    // sliver of the home CustomScrollView with no key/controller
-                    // exposed here. Wiring a real scroll-to would mean threading
-                    // a GlobalKey + ScrollController through the whole page for
-                    // one minor link — not worth the fragility. Revisit if the
-                    // footer gains more scroll-target links.
-                    onTap: null,
+                    label: 'الأصناف',
+                    // Opens the full category list; each row drills into the
+                    // matching CategoryProductsPage. Same category set the home
+                    // chip row shows.
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CategoriesPage(),
+                      ),
+                    ),
                   ),
                   _FooterLink(
                     label: 'الخصومات',
@@ -77,20 +81,20 @@ class StoreFooter extends StatelessWidget {
                       MaterialPageRoute(builder: (_) => const ContactPage()),
                     ),
                   ),
+                  _FooterLink(
+                    label: 'سياسة الشحن والتوصيل',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ShippingPolicyPage(),
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
               const SocialIconsRow(),
               const SizedBox(height: 20),
-              Text(
-                deliveryPolicyText,
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 12),
               Text(
                 '© 2026 $storeName',
                 textAlign: TextAlign.center,

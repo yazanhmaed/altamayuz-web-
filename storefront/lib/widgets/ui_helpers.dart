@@ -61,18 +61,18 @@ class _ProductCardSkeletonState extends State<ProductCardSkeleton>
 /// [Image.network] that degrades gracefully when the URL is missing or fails
 /// to load (some products have no image yet), instead of throwing during build.
 ///
-/// On web it prefers rendering an HTML `<img>` element
-/// ([WebHtmlElementStrategy.prefer]) so Firebase Storage images load even
-/// though the bucket sends no CORS headers — a plain byte fetch would be
-/// blocked by the browser, breaking every image.
+/// Uses standard canvas-based `Image.network` decoding. CORS is confirmed live
+/// on the Firebase Storage bucket — `gsutil cors get` matches the repo's
+/// `cors.json` (origin `*`, method `GET`) — so byte fetches succeed and images
+/// render correctly in every layout context, including dynamically-sized
+/// `SliverGrid` cells.
 ///
-/// This is a workaround: the real fix is deploying `cors.json` (repo root) to
-/// the Storage bucket (`gsutil cors set cors.json gs://<bucket>`). Keep this
-/// parameter until that CORS config is actually live and verified in the
-/// browser's Network tab — removing it earlier has already broken all images
-/// once. The `<img>` path has a known downside (blank images in some
-/// dynamically-sized `Stack` grid layouts, flutter/flutter#163288 / #164405),
-/// which is still preferable to no images at all.
+/// `webHtmlElementStrategy: WebHtmlElementStrategy.prefer` was previously used
+/// as a workaround for missing bucket CORS headers; it's removed now that CORS
+/// is real, because it forces the platform-view HTML `<img>` path that renders
+/// blank inside `Stack`/`StackFit.expand` grid layouts (flutter/flutter#163288,
+/// #164405). Do not re-add it — if images break, diagnose fresh; the cause is
+/// not CORS anymore.
 ///
 /// [loadingBuilder] makes a still-loading image visually distinct from one that
 /// failed (both otherwise look like the grey placeholder), which matters when
@@ -88,7 +88,6 @@ class StoreImage extends StatelessWidget {
     return Image.network(
       url,
       fit: fit,
-      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
       loadingBuilder: (context, child, progress) =>
           progress == null ? child : const _ImageLoading(),
       errorBuilder: (_, __, ___) => const _ImagePlaceholder(),

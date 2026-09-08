@@ -3,17 +3,14 @@ import 'dart:developer';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../cart/cart_controller.dart';
-import '../theme/app_theme.dart';
+import '../utils/jordan_phone.dart';
 import '../utils/responsive.dart';
 import 'order_success_page.dart';
 
 class CheckoutPage extends StatefulWidget {
-  /// When set, checkout is a "buy now" purchase of this single item only —
-  /// the shared cart is neither read from nor modified. When null (the
-  /// normal "continue to checkout" flow), checkout reads and submits the
-  /// shared cart's contents as before.
   final CartLine? buyNowItem;
   const CheckoutPage({super.key, this.buyNowItem});
+
   @override
   State<CheckoutPage> createState() => _CheckoutPageState();
 }
@@ -27,8 +24,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final _streetCtrl = TextEditingController();
   bool _submitting = false;
 
-  /// Single source of truth for the order summary, total, and submission
-  /// payload — a "buy now" purchase of one item, or the shared cart.
   List<CartLine> get _items =>
       widget.buyNowItem != null ? [widget.buyNowItem!] : cartController.value;
 
@@ -48,15 +43,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      // Both the cart flow and "buy now" submit through the SAME callable,
-      // which validates stock and deducts it atomically in one transaction.
-      // The storefront never writes the order document or touches `products`
-      // directly — it only sends what was ordered.
       final callable =
           FirebaseFunctions.instance.httpsCallable('submitPublicOrder');
       await callable.call({
         'customerName': _nameCtrl.text.trim(),
-        'customerPhone': _phoneCtrl.text.trim(),
+        'customerPhone': jordanPhoneToE164(_phoneCtrl.text),
         'address': _cityCtrl.text.trim(),
         'area': _areaCtrl.text.trim(),
         'street': _streetCtrl.text.trim(),
@@ -69,8 +60,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 })
             .toList(),
       });
-      // Only the shared cart's own checkout flow clears it — a "buy now"
-      // purchase never touches the cart, since it wasn't its source.
+
       if (widget.buyNowItem == null) {
         cartController.clear();
       }
@@ -81,16 +71,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
       );
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
-      // The function reports the specific product/color/size that ran out
-      // in `message`; show it verbatim so the customer knows what failed.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'حدث خطأ، حاول مرة أخرى.')),
+        SnackBar(
+          content: Text(e.message ?? 'حدث خطأ، حاول مرة أخرى.'),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
       log(e.message ?? '');
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('حدث خطأ، حاول مرة أخرى.')),
+        SnackBar(
+          content: const Text('حدث خطأ، حاول مرة أخرى.'),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -98,116 +92,339 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildSummary(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('ملخص الطلب', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            ..._items.map(
-              (l) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                        child: Text(
-                            '${l.product.name} — ${l.variant.color} — مقاس ${l.size} × ${l.quantity}')),
-                    Text('${l.lineTotal.toStringAsFixed(0)} د.أ'),
-                  ],
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.shopping_bag_outlined,
+                  color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'ملخص الطلب',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
-            const Divider(),
-            Row(
-              children: [
-                const Text('الإجمالي',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
-                const Spacer(),
-                Text('${_total.toStringAsFixed(0)} د.أ',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, color: AppColors.accent)),
-              ],
-            ),
-          ],
-        ),
+              const Spacer(),
+              Chip(
+                label: Text('${_items.length} منتجات'),
+                visualDensity: VisualDensity.compact,
+                backgroundColor: theme.colorScheme.primary,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+
+          // Items List
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _items.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final line = _items[index];
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          line.product.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${line.variant.color} | مقاس ${line.size} × ${line.quantity}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${line.lineTotal.toStringAsFixed(0)} د.أ',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+
+          // Pricing Breakdown
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'رسوم الشحن',
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const Text(
+                'مجاني',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'الإجمالي النهائي',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '${_total.toStringAsFixed(2)} د.أ',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildForm(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Form(
       key: _formKey,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            'معلومات التوصيل',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Name Field
           TextFormField(
             controller: _nameCtrl,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(
-                labelText: 'الاسم الكامل', border: OutlineInputBorder()),
+            decoration: InputDecoration(
+              labelText: 'الاسم الكامل',
+              prefixIcon: const Icon(Icons.person_outline),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+
+          // Phone Field — fixed Jordan country code, bare 9-digit number.
+          // A leading 0 (e.g. 077…) is stripped automatically as you type.
           TextFormField(
             controller: _phoneCtrl,
             keyboardType: TextInputType.phone,
+            textDirection: TextDirection.ltr,
+            inputFormatters: [JordanPhoneInputFormatter()],
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(
-                labelText: 'رقم الهاتف', border: OutlineInputBorder()),
+            decoration: InputDecoration(
+              labelText: 'رقم الهاتف',
+              hintText: '7XXXXXXXX',
+              hintTextDirection: TextDirection.ltr,
+              prefixIcon: const Padding(
+                padding: EdgeInsetsDirectional.only(start: 12, end: 8),
+                child: Align(
+                  alignment: Alignment.center,
+                  widthFactor: 1,
+                  child: Text(
+                    '🇯🇴 $jordanDialCode',
+                    style: TextStyle(fontSize: 15),
+                  ),
+                ),
+              ),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             validator: (v) =>
-                (v == null || v.trim().length < 9) ? 'الرقم غير مكتمل' : null,
+                (v == null || v.trim().length != jordanLocalNumberLength)
+                    ? 'أدخل رقمًا من 9 أرقام'
+                    : null,
           ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _cityCtrl,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(
-                labelText: 'المدينة', border: OutlineInputBorder()),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+          const SizedBox(height: 16),
+
+          // City & Area Fields (Side by Side on Desktop/Tablet, Vertical on Mobile)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 450;
+              return Flex(
+                direction: isWide ? Axis.horizontal : Axis.vertical,
+                children: [
+                  Expanded(
+                    flex: isWide ? 1 : 0,
+                    child: TextFormField(
+                      controller: _cityCtrl,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      decoration: InputDecoration(
+                        labelText: 'المدينة',
+                        prefixIcon: const Icon(Icons.location_city_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+                    ),
+                  ),
+                  SizedBox(
+                    width: isWide ? 12 : 0,
+                    height: isWide ? 0 : 16,
+                  ),
+                  Expanded(
+                    flex: isWide ? 1 : 0,
+                    child: TextFormField(
+                      controller: _areaCtrl,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      decoration: InputDecoration(
+                        labelText: 'المنطقة / الحي',
+                        prefixIcon: const Icon(Icons.map_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _areaCtrl,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(
-                labelText: 'المنطقة', border: OutlineInputBorder()),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+
+          // Street Details
           TextFormField(
             controller: _streetCtrl,
-            decoration: const InputDecoration(
-                labelText: 'تفاصيل العنوان (اختياري)',
-                border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-                color: AppColors.accentSoft,
-                borderRadius: BorderRadius.circular(12)),
-            child: const Row(
-              children: [
-                Icon(Icons.local_shipping_outlined, color: AppColors.accent),
-                SizedBox(width: 10),
-                Expanded(
-                    child: Text(
-                        'الدفع كاش عند استلام الطلب — لا حاجة للدفع أونلاين.')),
-              ],
+            decoration: InputDecoration(
+              labelText: 'تفاصيل العنوان / الشارع (اختياري)',
+              prefixIcon: const Icon(Icons.home_outlined),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _submitting ? null : _submit,
-            child: _submitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Text('تأكيد الطلب'),
+
+          // Informational Badges
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.primary.withOpacity(0.15),
+              ),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.payments_outlined,
+                        color: theme.colorScheme.primary),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'الدفع عند استلام الطلب',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
+                Row(
+                  children: [
+                    Icon(Icons.assignment_return_outlined,
+                        color: theme.colorScheme.primary),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'في حال الإرجاع، يتم دفع بدل توصيل (دينارين فقط)',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 32),
+
+          // Submit Button
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              onPressed: _submitting ? null : _submit,
+              child: _submitting
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'تأكيد الطلب الآن',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+            ),
           ),
         ],
       ),
@@ -216,38 +433,60 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width > 768;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('إتمام الطلب')),
+      appBar: AppBar(
+        title: const Text('إتمام الطلب'),
+        centerTitle: true,
+      ),
       body: ResponsiveCenter(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth >= Responsive.tabletMax) {
-              return Padding(
-                padding: const EdgeInsets.all(24),
-                child: Row(
+        maxWidth: 1000,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (isDesktop) {
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                        flex: 3,
-                        child:
-                            SingleChildScrollView(child: _buildForm(context))),
-                    const SizedBox(width: 24),
-                    Expanded(flex: 2, child: _buildSummary(context)),
+                      flex: 3,
+                      child: _buildForm(context),
+                    ),
+                    const SizedBox(width: 32),
+                    Expanded(
+                      flex: 2,
+                      child: StickySummary(child: _buildSummary(context)),
+                    ),
                   ],
-                ),
+                );
+              }
+              return Column(
+                children: [
+                  _buildSummary(context),
+                  const SizedBox(height: 32),
+                  _buildForm(context),
+                ],
               );
-            }
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildSummary(context),
-                const SizedBox(height: 20),
-                _buildForm(context)
-              ],
-            );
-          },
+            },
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Helper to keep the summary visible when scrolling on Desktop
+class StickySummary extends StatelessWidget {
+  final Widget child;
+  const StickySummary({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [child],
     );
   }
 }

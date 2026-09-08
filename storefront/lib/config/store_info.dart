@@ -15,7 +15,7 @@ const instagramUrl = 'https://www.instagram.com/altamayuz.leather';
 const whatsappPhone = '962779128315';
 
 /// Separate phone number, shown on the Contact page (`tel:$contactPhone`).
-const contactPhone = '962789721946';
+const contactPhone = '+962789721946';
 
 const aboutText =
     '"التميز للجلود الطبيعية المميزة" وجهتك لأحذية جلدية أصيلة، مصنوعة من '

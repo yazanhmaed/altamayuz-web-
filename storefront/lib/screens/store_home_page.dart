@@ -4,11 +4,12 @@ import '../cart/cart_controller.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
-import '../widgets/cart_bar.dart';
+import '../widgets/category_card.dart';
 import '../widgets/product_card.dart';
 import '../widgets/store_footer.dart';
 import '../widgets/ui_helpers.dart';
 import '../widgets/cart_sheet.dart';
+import '../widgets/whatsapp_fab.dart';
 import 'category_products_page.dart';
 import 'product_detail_page.dart';
 
@@ -31,8 +32,12 @@ class _StoreHomePageState extends State<StoreHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Home-only, same boundary as StoreFooter. Flutter docks the FAB above
+      // Scaffold.bottomSheet (the CartBar), so it won't collide with it.
+      floatingActionButton: const WhatsAppFab(),
       appBar: AppBar(
-        title: Text('المتجر', style: Theme.of(context).textTheme.headlineSmall),
+        title: Text('التميز للجلود الطبيعية المميزة',
+            style: Theme.of(context).textTheme.headlineSmall),
         actions: [
           ValueListenableBuilder<List<CartLine>>(
             valueListenable: cartController,
@@ -41,12 +46,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.shopping_bag_outlined),
-                  onPressed: () => showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => const CartSheet(),
-                  ),
+                  onPressed: () => CartSheet.show(context),
                 ),
                 if (cart.isNotEmpty)
                   Positioned(
@@ -108,12 +108,20 @@ class _StoreHomePageState extends State<StoreHomePage> {
           final carousel = featured.length > 1
               ? featured.sublist(1)
               : <PublicProductModel>[];
-          final offers =
-              all.where((p) => p.isOnSale && p.isAvailable).toList();
-          final categories = {for (final p in all) p.category}.toList()..sort();
+          final offers = all.where((p) => p.isOnSale && p.isAvailable).toList();
+          // One entry per category, with a product count and the first
+          // product's image (used as the category card cover).
+          final categoryCounts = <String, int>{};
+          final categoryImage = <String, String>{};
+          for (final p in all) {
+            categoryCounts[p.category] = (categoryCounts[p.category] ?? 0) + 1;
+            categoryImage.putIfAbsent(p.category, () => p.coverImage);
+          }
+          final categories = categoryCounts.keys.toList()..sort();
 
-          if (all.isEmpty)
+          if (all.isEmpty) {
             return const Center(child: Text('لا توجد منتجات متاحة حاليًا'));
+          }
 
           return ResponsiveCenter(
             child: LayoutBuilder(
@@ -127,52 +135,59 @@ class _StoreHomePageState extends State<StoreHomePage> {
                         child: TextField(
                           controller: _searchCtrl,
                           onChanged: (v) => setState(() => _query = v),
+                          textInputAction: TextInputAction.search,
                           decoration: InputDecoration(
                             hintText: 'ابحث عن منتج...',
-                            prefixIcon: const Icon(Icons.search),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide:
-                                  const BorderSide(color: AppColors.border),
+                            hintStyle: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant
+                                  .withOpacity(0.7),
+                              fontSize: 14,
                             ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (_query.isEmpty)
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: 44,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            itemCount: categories.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: 8),
-                            itemBuilder: (context, i) => ActionChip(
-                              label: Text(categories[i]),
-                              backgroundColor: AppColors.surface,
-                              side: const BorderSide(color: AppColors.border),
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => CategoryProductsPage(
-                                      category: categories[i]),
-                                ),
+                            prefixIcon: Icon(
+                              Icons.search_rounded,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            // زر الإلغاء/المسح يظهر فقط عند كتابة نص
+                            suffixIcon: _query.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded,
+                                        size: 20),
+                                    onPressed: () {
+                                      _searchCtrl.clear();
+                                      setState(() => _query = '');
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: Theme.of(context).colorScheme.surface,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 14),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(
+                                color: AppColors.border.withOpacity(0.6),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 1.5,
                               ),
                             ),
                           ),
                         ),
                       ),
+                    ),
                     if (hero != null && _query.isEmpty)
                       SliverToBoxAdapter(child: _HeroBanner(product: hero)),
                     if (offers.isNotEmpty && _query.isEmpty) ...[
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding:
-                              const EdgeInsetsDirectional.fromSTEB(16, 24, 8, 12),
+                          padding: const EdgeInsetsDirectional.fromSTEB(
+                              16, 24, 8, 12),
                           child: Row(
                             children: [
                               Text('عروض خاصة',
@@ -235,6 +250,20 @@ class _StoreHomePageState extends State<StoreHomePage> {
                         ),
                       ),
                     ],
+                    // Category cards, just above the full product grid. Capped
+                    // at 3 rows with a "show all" toggle so the list never
+                    // dominates the page.
+                    if (_query.isEmpty && categories.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                          child: _CategoryCardsSection(
+                            categories: categories,
+                            counts: categoryCounts,
+                            images: categoryImage,
+                          ),
+                        ),
+                      ),
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
@@ -277,6 +306,118 @@ class _StoreHomePageState extends State<StoreHomePage> {
         },
       ),
       // bottomSheet: const CartBar(),
+    );
+  }
+}
+
+/// Home-screen category browser: a grid of [CategoryCard]s capped at 3 rows.
+/// If the categories overflow that, a toggle reveals the rest — every category
+/// stays reachable, nothing is dropped.
+class _CategoryCardsSection extends StatefulWidget {
+  final List<String> categories;
+  final Map<String, int> counts;
+  final Map<String, String> images;
+
+  const _CategoryCardsSection({
+    required this.categories,
+    required this.counts,
+    required this.images,
+  });
+
+  @override
+  State<_CategoryCardsSection> createState() => _CategoryCardsSectionState();
+}
+
+class _CategoryCardsSectionState extends State<_CategoryCardsSection> {
+  static const double _spacing = 10;
+  static const double _tileAspect = 1.1; // width / height
+  static const int _collapsedRows = 3;
+
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'تسوّق حسب الصنف',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = (constraints.maxWidth / 130).floor().clamp(2, 6);
+            final tileWidth =
+                (constraints.maxWidth - _spacing * (columns - 1)) / columns;
+            final tileHeight = tileWidth / _tileAspect;
+            final totalRows = (widget.categories.length / columns).ceil();
+            final overflows = totalRows > _collapsedRows;
+            final collapsedHeight =
+                tileHeight * _collapsedRows + _spacing * (_collapsedRows - 1);
+
+            final grid = GridView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: _spacing,
+                crossAxisSpacing: _spacing,
+                childAspectRatio: _tileAspect,
+              ),
+              itemCount: widget.categories.length,
+              itemBuilder: (context, i) {
+                final name = widget.categories[i];
+                return CategoryCard(
+                  name: name,
+                  count: widget.counts[name] ?? 0,
+                  coverImage: widget.images[name] ?? '',
+                );
+              },
+            );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  alignment: Alignment.topCenter,
+                  child: (overflows && !_expanded)
+                      ? SizedBox(
+                          height: collapsedHeight,
+                          child: ClipRect(
+                            child: OverflowBox(
+                              alignment: Alignment.topCenter,
+                              minHeight: 0,
+                              maxHeight: double.infinity,
+                              child: grid,
+                            ),
+                          ),
+                        )
+                      : grid,
+                ),
+                if (overflows)
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _expanded = !_expanded),
+                      icon: Icon(
+                        _expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 20,
+                      ),
+                      label: Text(_expanded ? 'عرض أقل' : 'عرض كل الأصناف'),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }
