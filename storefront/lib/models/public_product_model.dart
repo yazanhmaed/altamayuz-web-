@@ -24,6 +24,7 @@ class PublicProductModel {
   final String id;
   final String name;
   final double price;
+  final double? salePrice;
   final bool isFeatured;
   final String category;
   final List<ProductVariant> variants;
@@ -32,10 +33,18 @@ class PublicProductModel {
     required this.id,
     required this.name,
     required this.price,
+    this.salePrice,
     required this.isFeatured,
     required this.category,
     required this.variants,
   });
+
+  bool get isOnSale => salePrice != null && salePrice! > 0 && salePrice! < price;
+
+  double get effectivePrice => isOnSale ? salePrice! : price;
+
+  int get discountPercent =>
+      isOnSale ? (((price - salePrice!) / price) * 100).round() : 0;
 
   bool get isAvailable => variants.any((v) => v.isAvailable);
   String get coverImage {
@@ -50,6 +59,7 @@ class PublicProductModel {
       id: map['id'] as String,
       name: map['name'] as String,
       price: (map['price'] as num).toDouble(),
+      salePrice: (map['salePrice'] as num?)?.toDouble(),
       isFeatured: map['isFeatured'] as bool? ?? false,
       category: map['category'] as String? ?? 'عام',
       variants: (map['variants'] as List)
@@ -90,6 +100,7 @@ class PublicProductModel {
       id: id,
       name: map['name'] as String? ?? '',
       price: price,
+      salePrice: (map['salePrice'] as num?)?.toDouble(),
       isFeatured: map['isFeatured'] as bool? ?? false,
       category: map['category'] as String? ?? 'عام',
       variants: variants,

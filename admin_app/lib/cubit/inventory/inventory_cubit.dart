@@ -75,6 +75,7 @@ class InventoryCubit extends Cubit<InventoryState> {
   // ---- add/edit product form state ----
   final nameCtrl = TextEditingController();
   final priceCtrl = TextEditingController();
+  final salePriceCtrl = TextEditingController();
   final lowStockCtrl = TextEditingController(text: '1');
   final categoryCtrl = TextEditingController(text: 'عام');
   bool addingNewCategory = false;
@@ -133,6 +134,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     editingProduct = null;
     nameCtrl.clear();
     priceCtrl.clear();
+    salePriceCtrl.clear();
     lowStockCtrl.text = '1';
     categoryCtrl.text = 'عام';
     addingNewCategory = false;
@@ -152,6 +154,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     editingProduct = product;
     nameCtrl.text = product.name;
     priceCtrl.text = product.price.toString();
+    salePriceCtrl.text = product.salePrice?.toString() ?? '';
     lowStockCtrl.text = product.lowStockThreshold.toString();
     categoryCtrl.text = product.category;
     addingNewCategory = false;
@@ -262,7 +265,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     return result;
   }
 
-  ProductModel _buildProductFromInputs(String id) {
+  ProductModel _buildProductFromInputs(String id, double? salePrice) {
     final colors = <String>[];
     final stock = <String, Map<String, int>>{};
     final imageUrls = <String, String>{};
@@ -288,6 +291,7 @@ class InventoryCubit extends Cubit<InventoryState> {
       id: id,
       name: nameCtrl.text.trim(),
       price: double.tryParse(priceCtrl.text.trim()) ?? 0,
+      salePrice: salePrice,
       colors: colors,
       imageUrls: imageUrls,
       stock: stock,
@@ -305,10 +309,23 @@ class InventoryCubit extends Cubit<InventoryState> {
       emit(InventoryError('اسم المنتج مطلوب.'));
       return;
     }
+
+    final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
+    final saleText = salePriceCtrl.text.trim();
+    double? salePrice;
+    if (saleText.isNotEmpty) {
+      final parsed = double.tryParse(saleText);
+      if (parsed == null || parsed <= 0 || parsed >= price) {
+        emit(InventoryError('سعر الخصم يجب أن يكون رقمًا أكبر من صفر وأقل من السعر الأصلي.'));
+        return;
+      }
+      salePrice = parsed;
+    }
+
     emit(InventoryLoading());
     try {
       final id = editingProduct?.id ?? _db.collection('products').doc().id;
-      var product = _buildProductFromInputs(id);
+      var product = _buildProductFromInputs(id, salePrice);
       final uploadedUrls = await _uploadPendingImages(id, product.imageUrls);
       product = product.copyWith(imageUrls: uploadedUrls);
 
@@ -580,6 +597,7 @@ class InventoryCubit extends Cubit<InventoryState> {
   Future<void> close() {
     nameCtrl.dispose();
     priceCtrl.dispose();
+    salePriceCtrl.dispose();
     lowStockCtrl.dispose();
     categoryCtrl.dispose();
     for (final row in colorRows) {

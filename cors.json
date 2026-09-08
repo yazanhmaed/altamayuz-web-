@@ -1,8 +1,14 @@
 [
   {
     "origin": ["*"],
-    "method": ["GET"],
-    "responseHeader": ["Content-Type"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Content-Range",
+      "Content-Encoding",
+      "Cache-Control"
+    ],
     "maxAgeSeconds": 3600
   }
 ]

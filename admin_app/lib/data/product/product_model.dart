@@ -2,6 +2,7 @@ class ProductModel {
   final String id;
   final String name;
   final double price;
+  final double? salePrice;
   final List<String> colors;
   final Map<String, String> imageUrls; // color -> image URL
   final Map<String, Map<String, int>> stock; // color -> size -> qty
@@ -16,6 +17,7 @@ class ProductModel {
     required this.id,
     required this.name,
     required this.price,
+    this.salePrice,
     required this.colors,
     required this.imageUrls,
     required this.stock,
@@ -34,10 +36,18 @@ class ProductModel {
   String? imageFor(String color) =>
       imageUrls[color]?.isNotEmpty == true ? imageUrls[color] : null;
 
+  bool get isOnSale => salePrice != null && salePrice! > 0 && salePrice! < price;
+
+  double get effectivePrice => isOnSale ? salePrice! : price;
+
+  int get discountPercent =>
+      isOnSale ? (((price - salePrice!) / price) * 100).round() : 0;
+
   ProductModel copyWith({
     String? id,
     String? name,
     double? price,
+    double? salePrice,
     List<String>? colors,
     Map<String, String>? imageUrls,
     Map<String, Map<String, int>>? stock,
@@ -52,6 +62,7 @@ class ProductModel {
       id: id ?? this.id,
       name: name ?? this.name,
       price: price ?? this.price,
+      salePrice: salePrice ?? this.salePrice,
       colors: colors ?? this.colors,
       imageUrls: imageUrls ?? this.imageUrls,
       stock: stock ?? this.stock,
@@ -68,6 +79,7 @@ class ProductModel {
     'id': id,
     'name': name,
     'price': price,
+    'salePrice': salePrice,
     'colors': colors,
     'imageUrls': imageUrls,
     'stock': stock,
@@ -84,6 +96,7 @@ class ProductModel {
       id: map['id'] as String,
       name: map['name'] as String,
       price: (map['price'] as num?)?.toDouble() ?? 0,
+      salePrice: (map['salePrice'] as num?)?.toDouble(),
       colors: List<String>.from(map['colors'] ?? []),
       imageUrls: Map<String, String>.from(map['imageUrls'] ?? {}),
       stock: (map['stock'] as Map? ?? {}).map(

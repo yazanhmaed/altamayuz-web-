@@ -9,7 +9,7 @@ class CartLine {
 
   CartLine({required this.product, required this.variant, required this.size, this.quantity = 1});
 
-  double get lineTotal => product.price * quantity;
+  double get lineTotal => product.effectivePrice * quantity;
   String get key => '${product.id}-${variant.color}-$size';
 }
 

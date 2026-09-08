@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 
 class ProductCardSkeleton extends StatefulWidget {
@@ -7,9 +8,11 @@ class ProductCardSkeleton extends StatefulWidget {
   State<ProductCardSkeleton> createState() => _ProductCardSkeletonState();
 }
 
-class _ProductCardSkeletonState extends State<ProductCardSkeleton> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
+class _ProductCardSkeletonState extends State<ProductCardSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200))
+    ..repeat();
 
   @override
   void dispose() {
@@ -27,15 +30,23 @@ class _ProductCardSkeletonState extends State<ProductCardSkeleton> with SingleTi
           clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              Expanded(child: ColoredBox(color: AppColors.border.withValues(alpha: opacity))),
+              Expanded(
+                  child: ColoredBox(
+                      color: AppColors.border.withValues(alpha: opacity))),
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(height: 12, width: 100, color: AppColors.border.withValues(alpha: opacity)),
+                    Container(
+                        height: 12,
+                        width: 100,
+                        color: AppColors.border.withValues(alpha: opacity)),
                     const SizedBox(height: 8),
-                    Container(height: 12, width: 60, color: AppColors.border.withValues(alpha: opacity)),
+                    Container(
+                        height: 12,
+                        width: 60,
+                        color: AppColors.border.withValues(alpha: opacity)),
                   ],
                 ),
               ),
@@ -53,7 +64,19 @@ class _ProductCardSkeletonState extends State<ProductCardSkeleton> with SingleTi
 /// On web it prefers rendering an HTML `<img>` element
 /// ([WebHtmlElementStrategy.prefer]) so Firebase Storage images load even
 /// though the bucket sends no CORS headers — a plain byte fetch would be
-/// blocked by the browser.
+/// blocked by the browser, breaking every image.
+///
+/// This is a workaround: the real fix is deploying `cors.json` (repo root) to
+/// the Storage bucket (`gsutil cors set cors.json gs://<bucket>`). Keep this
+/// parameter until that CORS config is actually live and verified in the
+/// browser's Network tab — removing it earlier has already broken all images
+/// once. The `<img>` path has a known downside (blank images in some
+/// dynamically-sized `Stack` grid layouts, flutter/flutter#163288 / #164405),
+/// which is still preferable to no images at all.
+///
+/// [loadingBuilder] makes a still-loading image visually distinct from one that
+/// failed (both otherwise look like the grey placeholder), which matters when
+/// diagnosing image issues.
 class StoreImage extends StatelessWidget {
   final String url;
   final BoxFit fit;
@@ -66,7 +89,27 @@ class StoreImage extends StatelessWidget {
       url,
       fit: fit,
       webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+      loadingBuilder: (context, child, progress) =>
+          progress == null ? child : const _ImageLoading(),
       errorBuilder: (_, __, ___) => const _ImagePlaceholder(),
+    );
+  }
+}
+
+class _ImageLoading extends StatelessWidget {
+  const _ImageLoading();
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: AppColors.border,
+      child: Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child:
+              CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+        ),
+      ),
     );
   }
 }
@@ -77,7 +120,94 @@ class _ImagePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return const ColoredBox(
       color: AppColors.border,
-      child: Center(child: Icon(Icons.image_not_supported_outlined, color: Colors.white54)),
+      child: Center(
+          child:
+              Icon(Icons.image_not_supported_outlined, color: Colors.white54)),
+    );
+  }
+}
+
+/// Renders a product's price: a single accent-coloured figure normally, or a
+/// struck-through original next to a bold [AppColors.danger] sale figure when
+/// [PublicProductModel.isOnSale] is true.
+class PriceDisplay extends StatelessWidget {
+  final PublicProductModel product;
+  final double fontSize;
+  final double? originalFontSize;
+  final int decimals;
+  final Color? baseColor;
+
+  const PriceDisplay({
+    super.key,
+    required this.product,
+    this.fontSize = 14,
+    this.originalFontSize,
+    this.decimals = 0,
+    this.baseColor,
+  });
+
+  String _fmt(double v) => '${v.toStringAsFixed(decimals)} د.أ';
+
+  @override
+  Widget build(BuildContext context) {
+    if (!product.isOnSale) {
+      return Text(
+        _fmt(product.price),
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: fontSize,
+          color: baseColor ?? AppColors.accent,
+        ),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _fmt(product.price),
+          style: TextStyle(
+              fontSize: originalFontSize ?? fontSize * 0.85,
+              color:
+                  baseColor?.withValues(alpha: 0.7) ?? AppColors.textSecondary,
+              decoration: TextDecoration.lineThrough,
+              decorationThickness: 2),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          _fmt(product.effectivePrice),
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: fontSize,
+            color: AppColors.danger,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Small rounded `-N%` badge in [AppColors.danger], for overlaying on product
+/// imagery.
+class DiscountBadge extends StatelessWidget {
+  final int percent;
+  const DiscountBadge({super.key, required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.danger,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$percent%',
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
+      ),
     );
   }
 }
@@ -96,20 +226,24 @@ void showAddedToCartToast(BuildContext context, String productName) {
         curve: Curves.easeOut,
         builder: (context, value, child) => Opacity(
           opacity: value,
-          child: Transform.translate(offset: Offset(0, (1 - value) * -12), child: child),
+          child: Transform.translate(
+              offset: Offset(0, (1 - value) * -12), child: child),
         ),
         child: Material(
           color: Colors.transparent,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+                color: AppColors.accent,
+                borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 const Icon(Icons.check_circle, color: Colors.white, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text('تمت إضافة "$productName" للسلة',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700)),
                 ),
               ],
             ),

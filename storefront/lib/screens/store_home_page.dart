@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/cart_bar.dart';
 import '../widgets/product_card.dart';
+import '../widgets/store_footer.dart';
 import '../widgets/ui_helpers.dart';
 import '../widgets/cart_sheet.dart';
 import 'category_products_page.dart';
@@ -107,6 +108,8 @@ class _StoreHomePageState extends State<StoreHomePage> {
           final carousel = featured.length > 1
               ? featured.sublist(1)
               : <PublicProductModel>[];
+          final offers =
+              all.where((p) => p.isOnSale && p.isAvailable).toList();
           final categories = {for (final p in all) p.category}.toList()..sort();
 
           if (all.isEmpty)
@@ -165,6 +168,49 @@ class _StoreHomePageState extends State<StoreHomePage> {
                       ),
                     if (hero != null && _query.isEmpty)
                       SliverToBoxAdapter(child: _HeroBanner(product: hero)),
+                    if (offers.isNotEmpty && _query.isEmpty) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding:
+                              const EdgeInsetsDirectional.fromSTEB(16, 24, 8, 12),
+                          child: Row(
+                            children: [
+                              Text('عروض خاصة',
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const CategoryProductsPage(
+                                      onlyOnSale: true,
+                                      titleOverride: 'عروض خاصة',
+                                    ),
+                                  ),
+                                ),
+                                child: const Text('عرض الكل'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 220,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: offers.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 12),
+                            itemBuilder: (context, i) => SizedBox(
+                                width: 150,
+                                child: ProductCard(product: offers[i])),
+                          ),
+                        ),
+                      ),
+                    ],
                     if (carousel.isNotEmpty && _query.isEmpty) ...[
                       SliverToBoxAdapter(
                         child: Padding(
@@ -222,6 +268,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                           ),
                         ),
                       ),
+                    const SliverToBoxAdapter(child: StoreFooter()),
                   ],
                 );
               },
@@ -273,7 +320,7 @@ class _HeroBanner extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Text(product.name,
@@ -282,9 +329,11 @@ class _HeroBanner extends StatelessWidget {
                           fontSize: 22,
                           fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text('${product.price.toStringAsFixed(0)} د.أ',
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 16)),
+                  PriceDisplay(
+                    product: product,
+                    fontSize: 16,
+                    baseColor: Colors.white,
+                  ),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(

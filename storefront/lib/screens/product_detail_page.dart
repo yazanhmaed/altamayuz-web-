@@ -54,7 +54,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(product.name, style: Theme.of(context).textTheme.headlineSmall),
-        Text('${product.price.toStringAsFixed(2)} د.أ', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 4),
+        PriceDisplay(product: product, fontSize: 22, originalFontSize: 16, decimals: 2),
         const SizedBox(height: 16),
         const Text('اللون'),
         const SizedBox(height: 8),

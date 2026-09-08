@@ -7,13 +7,34 @@ import '../widgets/product_card.dart';
 import '../widgets/ui_helpers.dart';
 
 class CategoryProductsPage extends StatelessWidget {
-  final String category;
-  const CategoryProductsPage({super.key, required this.category});
+  /// When set, only products in this category are shown.
+  final String? category;
+
+  /// When true, only products currently on sale are shown.
+  final bool onlyOnSale;
+
+  /// Overrides the app bar title (defaults to [category] or a sale label).
+  final String? titleOverride;
+
+  const CategoryProductsPage({
+    super.key,
+    this.category,
+    this.onlyOnSale = false,
+    this.titleOverride,
+  }) : assert(category != null || onlyOnSale, 'need a category or a filter');
+
+  String get _title => titleOverride ?? category ?? 'عروض خاصة';
+
+  bool _matches(PublicProductModel p) {
+    if (category != null && p.category != category) return false;
+    if (onlyOnSale && !p.isOnSale) return false;
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(category)),
+      appBar: AppBar(title: Text(_title)),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('products')
@@ -39,11 +60,15 @@ class CategoryProductsPage extends StatelessWidget {
                     d.data() as Map<String, dynamic>,
                   ))
               .whereType<PublicProductModel>()
-              .where((p) => p.category == category)
+              .where(_matches)
               .toList();
 
           if (products.isEmpty) {
-            return const Center(child: Text('لا توجد منتجات في هذا التصنيف بعد'));
+            return Center(
+              child: Text(onlyOnSale
+                  ? 'لا توجد عروض متاحة حاليًا'
+                  : 'لا توجد منتجات في هذا التصنيف بعد'),
+            );
           }
 
           return ResponsiveCenter(

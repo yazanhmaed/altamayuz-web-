@@ -87,7 +87,10 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
     for (const [productId, colors] of Object.entries(need)) {
       const data = productDocs[productId];
       const stock = { ...data.stock };
-      const price = data.price as number;
+      const price: number =
+        data.salePrice && data.salePrice > 0 && data.salePrice < data.price
+          ? data.salePrice
+          : data.price;
 
       for (const [color, sizes] of Object.entries(colors)) {
         const colorStock = { ...(stock[color] ?? {}) };

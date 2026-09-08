@@ -113,13 +113,50 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ),
               ),
               const SizedBox(height: 12),
-              Labeled(
-                label: 'السعر',
-                child: TextFormField(
-                  controller: cubit.priceCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Labeled(
+                      label: 'السعر',
+                      child: TextFormField(
+                        controller: cubit.priceCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(border: OutlineInputBorder()),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Labeled(
+                      label: 'سعر الخصم (اختياري)',
+                      child: TextFormField(
+                        controller: cubit.salePriceCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(border: OutlineInputBorder()),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Builder(
+                builder: (context) {
+                  final price = double.tryParse(cubit.priceCtrl.text.trim());
+                  final sale = double.tryParse(cubit.salePriceCtrl.text.trim());
+                  if (price == null || sale == null || price <= 0 || sale <= 0 || sale >= price) {
+                    return const SizedBox.shrink();
+                  }
+                  final percent = (((price - sale) / price) * 100).round();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'خصم $percent%: ${sale.toStringAsFixed(2)} بدلًا من ${price.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.w600),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               Labeled(
@@ -174,7 +211,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           children: [
                             GestureDetector(
                               onTap: () async {
-                                final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+                                final picked = await ImagePicker().pickImage(
+                                  source: ImageSource.gallery,
+                                  imageQuality: 80,
+                                  maxWidth: 1600,
+                                );
                                 if (picked != null && color.isNotEmpty) {
                                   cubit.pickColorImage(color, picked);
                                 }
