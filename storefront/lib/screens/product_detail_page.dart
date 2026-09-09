@@ -8,6 +8,7 @@ import '../utils/responsive.dart';
 import '../widgets/product_card.dart';
 import '../widgets/ui_helpers.dart';
 import 'checkout_page.dart';
+import 'image_viewer_page.dart';
 
 class ProductDetailPage extends StatefulWidget {
   final PublicProductModel product;
@@ -37,22 +38,53 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     });
   }
 
-  Widget _buildImage() {
-    return AspectRatio(
-      aspectRatio: 1,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 280),
-          switchInCurve: Curves.easeOut,
-          transitionBuilder: (child, animation) =>
-              FadeTransition(opacity: animation, child: child),
-          child: StoreImage(
-            key: ValueKey(_selectedVariant.color),
-            url: _selectedVariant.imageUrl,
-          ),
+  void _openImageViewer() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        // Snappy lightbox fade — explicit, rather than PageRouteBuilder's
+        // implicit 300ms default (a touch slow for a media overlay).
+        transitionDuration: const Duration(milliseconds: 200),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (context, animation, secondaryAnimation) => FadeTransition(
+          opacity: animation,
+          child: ImageViewerPage(imageUrl: _selectedVariant.imageUrl),
         ),
       ),
+    );
+  }
+
+  Widget _buildImage() {
+    return Stack(
+      children: [
+        AspectRatio(
+          aspectRatio: 1,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 280),
+              switchInCurve: Curves.easeOut,
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
+              child: StoreImage(
+                key: ValueKey(_selectedVariant.color),
+                url: _selectedVariant.imageUrl,
+              ),
+            ),
+          ),
+        ),
+        // Tap-to-zoom. Transparent Material + InkWell on top so the ripple
+        // paints above the (opaque) photo — same pattern as ProductCard.
+        Positioned.fill(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: _openImageViewer,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -89,8 +121,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                           width: isSelected ? 2 : 1),
                     ),
                     child: ClipRRect(
-                        borderRadius: BorderRadius.circular(7),
-                        child: StoreImage(url: v.imageUrl)),
+                      borderRadius: BorderRadius.circular(7),
+                      // 56px swatch — decode at ~3x, not the stored 1600px.
+                      child: StoreImage(url: v.imageUrl, cacheWidth: 170),
+                    ),
                   ),
                 ),
                 // Ripple on top of the (opaque) swatch image. InkWell handles

@@ -60,8 +60,10 @@ class _CartDiscountBannerState extends State<CartDiscountBanner> {
           const Icon(Icons.local_offer, color: Colors.white, size: 20),
           const SizedBox(width: 12),
           Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // A Column, not a Row: the heading + one Text per tier must stack
+            // and wrap on their own lines. Multiple non-flexible Texts in a
+            // Row overflow at ~320px (RenderFlex).
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(

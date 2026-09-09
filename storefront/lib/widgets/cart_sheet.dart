@@ -190,7 +190,10 @@ class CartContent extends StatelessWidget {
                               child: SizedBox(
                                 width: 70,
                                 height: 70,
-                                child: StoreImage(url: line.variant.imageUrl),
+                                // 70px thumb — decode at ~3x, not 1600px.
+                                child: StoreImage(
+                                    url: line.variant.imageUrl,
+                                    cacheWidth: 210),
                               ),
                             ),
                             const SizedBox(width: 14),

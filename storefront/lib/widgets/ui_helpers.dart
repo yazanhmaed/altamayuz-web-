@@ -77,10 +77,25 @@ class _ProductCardSkeletonState extends State<ProductCardSkeleton>
 /// [loadingBuilder] makes a still-loading image visually distinct from one that
 /// failed (both otherwise look like the grey placeholder), which matters when
 /// diagnosing image issues.
+///
+/// [cacheWidth]/[cacheHeight]: product photos are stored at up to 1600px wide
+/// but shown much smaller (≤150px in cards, ~70px cart thumbs, ~56px swatches).
+/// Flutter decodes at source resolution by default, so a grid of small cards
+/// pays the full 1600px decode cost per image. Call sites pass a target close
+/// to their rendered size × DPR — sharp on phones, a fraction of the memory/CPU.
+/// The full-screen zoom viewer deliberately passes neither (it needs full res).
 class StoreImage extends StatelessWidget {
   final String url;
   final BoxFit fit;
-  const StoreImage({super.key, required this.url, this.fit = BoxFit.cover});
+  final int? cacheWidth;
+  final int? cacheHeight;
+  const StoreImage({
+    super.key,
+    required this.url,
+    this.fit = BoxFit.cover,
+    this.cacheWidth,
+    this.cacheHeight,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +103,8 @@ class StoreImage extends StatelessWidget {
     return Image.network(
       url,
       fit: fit,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
       loadingBuilder: (context, child, progress) =>
           progress == null ? child : const _ImageLoading(),
       errorBuilder: (_, __, ___) => const _ImagePlaceholder(),

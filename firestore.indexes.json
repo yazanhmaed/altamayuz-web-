@@ -3,9 +3,18 @@
     {
       "collectionGroup": "orders",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "customerPhone", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
   ],

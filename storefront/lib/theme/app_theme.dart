@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   static const bg = Color(0xFFF6F3EC);
@@ -22,11 +21,25 @@ class AppTheme {
         surface: AppColors.surface,
         error: AppColors.danger,
       ),
-      textTheme: GoogleFonts.tajawalTextTheme(base.textTheme).copyWith(
-        headlineSmall: GoogleFonts.tajawal(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-        titleMedium: GoogleFonts.tajawal(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-        bodyMedium: GoogleFonts.tajawal(fontSize: 14, color: AppColors.textPrimary),
-        bodySmall: GoogleFonts.tajawal(fontSize: 12, color: AppColors.textSecondary),
+      // base.textTheme already carries fontFamily: 'Tajawal' (set on ThemeData
+      // above), now resolving to the locally-bundled asset — no network fetch.
+      textTheme: base.textTheme.copyWith(
+        headlineSmall: const TextStyle(
+            fontFamily: 'Tajawal',
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary),
+        titleMedium: const TextStyle(
+            fontFamily: 'Tajawal',
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary),
+        bodyMedium: const TextStyle(
+            fontFamily: 'Tajawal', fontSize: 14, color: AppColors.textPrimary),
+        bodySmall: const TextStyle(
+            fontFamily: 'Tajawal',
+            fontSize: 12,
+            color: AppColors.textSecondary),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.bg,
@@ -40,8 +53,10 @@ class AppTheme {
           backgroundColor: AppColors.accent,
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: GoogleFonts.tajawal(fontSize: 16, fontWeight: FontWeight.w700),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(
+              fontFamily: 'Tajawal', fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -49,8 +64,10 @@ class AppTheme {
           foregroundColor: AppColors.accent,
           side: const BorderSide(color: AppColors.accent),
           minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: GoogleFonts.tajawal(fontSize: 16, fontWeight: FontWeight.w700),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(
+              fontFamily: 'Tajawal', fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),
       cardTheme: CardThemeData(

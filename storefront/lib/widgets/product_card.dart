@@ -27,7 +27,9 @@ class ProductCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    StoreImage(url: product.coverImage),
+                    // Card image renders at ~150px; decode at ~3x for high-DPI
+                    // phones instead of the stored 1600px.
+                    StoreImage(url: product.coverImage, cacheWidth: 450),
                     if (!isAvailable)
                       Container(
                         color: Colors.black.withValues(alpha: 0.45),
@@ -80,8 +82,11 @@ class ProductCard extends StatelessWidget {
                                 color: AppColors.border,
                                 border: Border.all(color: AppColors.border),
                               ),
-                              child:
-                                  ClipOval(child: StoreImage(url: v.imageUrl)),
+                              // 12px dot — no need to decode above ~48px.
+                              child: ClipOval(
+                                child:
+                                    StoreImage(url: v.imageUrl, cacheWidth: 48),
+                              ),
                             ),
                           ),
                         ),

@@ -25,7 +25,8 @@ class CategoryCard extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          StoreImage(url: coverImage),
+          // Card renders at ~150–200px; decode at ~3x for high-DPI phones.
+          StoreImage(url: coverImage, cacheWidth: 500),
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(

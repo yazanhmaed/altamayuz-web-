@@ -24,10 +24,88 @@ class _StoreHomePageState extends State<StoreHomePage> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
+  // ---- "كل المنتجات" grid: cursor pagination (independent of the bounded
+  // catalog-snapshot stream that powers every other section). One-time get()
+  // per page — never a second .snapshots() listener. Only active while the
+  // search field is empty; a search query suspends it.
+  static const int _pageSize = 20;
+  final _scrollCtrl = ScrollController();
+  final List<PublicProductModel> _gridItems = [];
+  DocumentSnapshot? _lastDoc;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+  String? _loadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_onScroll);
+    _loadNextPage(); // first page
+  }
+
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    // Pagination is suspended during search (grid then shows client-side
+    // filtered results from the bounded snapshot, already all in memory).
+    if (_query.isNotEmpty || !_scrollCtrl.hasClients) return;
+    final pos = _scrollCtrl.position;
+    if (pos.pixels >= pos.maxScrollExtent - 400) {
+      _loadNextPage();
+    }
+  }
+
+  Future<void> _loadNextPage() async {
+    if (_isLoadingMore || !_hasMore) return;
+    setState(() {
+      _isLoadingMore = true;
+      _loadError = null;
+    });
+    try {
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+          .collection('products')
+          .where('isActive', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(_pageSize);
+      if (_lastDoc != null) {
+        query = query.startAfterDocument(_lastDoc!);
+      }
+      final snap = await query.get();
+      final page = snap.docs
+          .map((d) => PublicProductModel.fromProductDoc(d.id, d.data()))
+          .whereType<PublicProductModel>()
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _gridItems.addAll(page);
+        if (snap.docs.isNotEmpty) _lastDoc = snap.docs.last;
+        // Decide from the raw doc count, not `page` — a page of non-sellable
+        // docs (all filtered out) still means there may be more.
+        if (snap.docs.length < _pageSize) _hasMore = false;
+      });
+      // If this page didn't fill the viewport (tall window, few columns, or a
+      // page that filtered down to nothing), no scroll event will fire — so
+      // re-check the threshold after layout and pull the next page if needed.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onScroll();
+      });
+    } catch (e, stack) {
+      // e.g. [cloud_firestore/failed-precondition] before the composite index
+      // finishes building, or any transient network error.
+      debugPrint('store_home_page: pagination fetch failed: $e\n$stack');
+      if (mounted) {
+        setState(() => _loadError = 'تعذر تحميل المزيد من المنتجات');
+      }
+    } finally {
+      // The actual "spins forever" fix: the loading flag is cleared on every
+      // path — success, failure, or early return.
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
   }
 
   @override
@@ -68,10 +146,28 @@ class _StoreHomePageState extends State<StoreHomePage> {
           const SizedBox(width: 8),
         ],
       ),
+      // Firestore reads active on this screen: this one products stream, plus
+      // CartDiscountBanner's single one-time settings/cartDiscountTiers get().
+      // Everything below — search filter, featured/hero/carousel, on-sale
+      // offers, category counts/covers — is derived client-side from this one
+      // `all` list, not separate queries.
+      //
+      // PERF NOTE (not worth fixing at current catalog size): CategoryProducts
+      // Page, CategoriesPage and ProductDetailPage's "related products" each
+      // open their own identical `products where isActive == true` stream on
+      // navigation instead of reusing this already-loaded list — a redundant
+      // full re-read. Fine for a small shop; revisit (shared repository /
+      // cache) before the catalog grows large.
       body: StreamBuilder<QuerySnapshot>(
+        // Bounded "catalog snapshot": powers hero / offers / featured /
+        // category cards, and search results. `.limit(300)` is a safety cap
+        // against unbounded growth, not a pagination mechanism — the "كل
+        // المنتجات" grid has its own cursor pagination (_loadNextPage) for
+        // the section whose length actually grows unbounded.
         stream: FirebaseFirestore.instance
             .collection('products')
             .where('isActive', isEqualTo: true)
+            .limit(300)
             .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
@@ -97,12 +193,15 @@ class _StoreHomePageState extends State<StoreHomePage> {
                   ))
               .whereType<PublicProductModel>()
               .toList();
-          final filtered = _query.isEmpty
+          final searching = _query.isNotEmpty;
+          // Search: client-side filter over the bounded snapshot (unchanged).
+          // Default browsing: the cursor-paginated list built by _loadNextPage.
+          final gridProducts = searching
               ? all
-              : all
                   .where((p) =>
                       p.name.toLowerCase().contains(_query.toLowerCase()))
-                  .toList();
+                  .toList()
+              : _gridItems;
           final featured =
               all.where((p) => p.isFeatured && p.isAvailable).toList();
           final hero = featured.isNotEmpty ? featured.first : null;
@@ -129,6 +228,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
               builder: (context, constraints) {
                 final columns = Responsive.gridColumns(constraints.maxWidth);
                 return CustomScrollView(
+                  controller: _scrollCtrl,
                   slivers: [
                     // Cart-wide quantity-discount promo. Self-hiding: renders
                     // nothing when no tiers are configured (no gap, no flicker).
@@ -277,11 +377,22 @@ class _StoreHomePageState extends State<StoreHomePage> {
                         ),
                       ),
                     ),
-                    if (filtered.isEmpty)
+                    if (searching && gridProducts.isEmpty)
                       const SliverToBoxAdapter(
                         child: Padding(
                           padding: EdgeInsets.all(32),
                           child: Center(child: Text('ما لقينا نتائج مطابقة')),
+                        ),
+                      )
+                    else if (!searching &&
+                        gridProducts.isEmpty &&
+                        !_isLoadingMore &&
+                        _loadError == null)
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(
+                              child: Text('لا توجد منتجات متاحة حاليًا')),
                         ),
                       )
                     else
@@ -296,9 +407,49 @@ class _StoreHomePageState extends State<StoreHomePage> {
                             childAspectRatio: 0.68,
                           ),
                           delegate: SliverChildBuilderDelegate(
-                            (context, i) => ProductCard(product: filtered[i]),
-                            childCount: filtered.length,
+                            (context, i) =>
+                                ProductCard(product: gridProducts[i]),
+                            childCount: gridProducts.length,
                           ),
+                        ),
+                      ),
+                    // Trailing state below the grid: a failed fetch shows the
+                    // error + retry (never just silently stops); otherwise the
+                    // next-page spinner while a fetch is in flight; nothing once
+                    // _hasMore is false.
+                    if (_loadError != null)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 24),
+                          child: Column(
+                            children: [
+                              Text(
+                                _loadError!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant),
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  setState(() => _loadError = null);
+                                  _loadNextPage();
+                                },
+                                icon: const Icon(Icons.refresh, size: 18),
+                                label: const Text('إعادة المحاولة'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (_isLoadingMore)
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
                         ),
                       ),
                     const SliverToBoxAdapter(child: StoreFooter()),
@@ -448,7 +599,10 @@ class _HeroBanner extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            StoreImage(url: product.coverImage),
+            // Hero is the largest, most prominent image on the page (full
+            // width, 320 tall) — kept at a generous cache size so it stays
+            // crisp, still below the ~1600px source.
+            StoreImage(url: product.coverImage, cacheWidth: 1200),
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
