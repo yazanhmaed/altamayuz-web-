@@ -22,8 +22,13 @@ service cloud.firestore {
       allow read, write: if isOwner();
     }
 
+    // Owner-only, except `cartDiscountTiers`: the storefront (unauthenticated)
+    // reads that one document directly to show cart-wide quantity discounts at
+    // checkout. Writes stay owner-only; the server re-sanitizes on every order
+    // regardless, so a public read is harmless.
     match /settings/{docId} {
-      allow read, write: if isOwner();
+      allow read: if isOwner() || docId == "cartDiscountTiers";
+      allow write: if isOwner();
     }
   }
 }

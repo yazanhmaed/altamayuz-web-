@@ -119,6 +119,18 @@ class OrderModel {
   final String source; // 'manual' | 'storefront'
   OrderStatus status;
 
+  /// Money fields written by the storefront `submitPublicOrder` function.
+  /// All nullable: manual orders never had them, and storefront orders placed
+  /// before the cart-discount feature existed won't have [subtotal] /
+  /// [cartDiscountAmount] / [cartDiscountTierMinQuantity] either — absent means
+  /// "no cart discount was ever computed", not an error.
+  ///
+  /// [total] is the NET amount owed (subtotal minus [cartDiscountAmount]).
+  final double? subtotal;
+  final double? cartDiscountAmount;
+  final int? cartDiscountTierMinQuantity;
+  final double? total;
+
   OrderModel({
     required this.id,
     required this.customerName,
@@ -133,7 +145,15 @@ class OrderModel {
     required this.status,
     required this.deliveryDate,
     this.source = 'manual',
+    this.subtotal,
+    this.cartDiscountAmount,
+    this.cartDiscountTierMinQuantity,
+    this.total,
   });
+
+  /// True when a cart-wide quantity discount actually reduced this order.
+  bool get hasCartDiscount =>
+      cartDiscountAmount != null && cartDiscountAmount! > 0;
 
   OrderModel copyWith({
     String? id,
@@ -149,6 +169,10 @@ class OrderModel {
     String? deliveryDate,
     OrderStatus? status,
     String? source,
+    double? subtotal,
+    double? cartDiscountAmount,
+    int? cartDiscountTierMinQuantity,
+    double? total,
   }) {
     return OrderModel(
       id: id ?? this.id,
@@ -164,6 +188,11 @@ class OrderModel {
       deliveryDate: deliveryDate ?? this.deliveryDate,
       status: status ?? this.status,
       source: source ?? this.source,
+      subtotal: subtotal ?? this.subtotal,
+      cartDiscountAmount: cartDiscountAmount ?? this.cartDiscountAmount,
+      cartDiscountTierMinQuantity:
+          cartDiscountTierMinQuantity ?? this.cartDiscountTierMinQuantity,
+      total: total ?? this.total,
     );
   }
 
@@ -184,6 +213,13 @@ class OrderModel {
     'deliveryDate': deliveryDate,
     'status': status.englishName,
     'source': source,
+    // Preserve the storefront's money fields when the owner edits a storefront
+    // order (submitOrder does a full tx.set with this map). Null for manual
+    // orders, which don't track prices.
+    'subtotal': subtotal,
+    'cartDiscountAmount': cartDiscountAmount,
+    'cartDiscountTierMinQuantity': cartDiscountTierMinQuantity,
+    'total': total,
   };
 
   factory OrderModel.fromMap(Map<String, dynamic> map) {
@@ -206,6 +242,11 @@ class OrderModel {
         orElse: () => OrderStatus.pending,
       ),
       source: map['source'] as String? ?? 'manual',
+      subtotal: (map['subtotal'] as num?)?.toDouble(),
+      cartDiscountAmount: (map['cartDiscountAmount'] as num?)?.toDouble(),
+      cartDiscountTierMinQuantity:
+          (map['cartDiscountTierMinQuantity'] as num?)?.toInt(),
+      total: (map['total'] as num?)?.toDouble(),
     );
   }
 }

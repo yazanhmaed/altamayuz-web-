@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/public_product_model.dart';
 import '../utils/responsive.dart';
-import '../widgets/cart_bar.dart';
 import '../widgets/category_card.dart';
 
 /// Grid of category cards, each showing the first product's image as its cover
@@ -71,7 +70,6 @@ class CategoriesPage extends StatelessWidget {
           );
         },
       ),
-      bottomSheet: const CartBar(),
     );
   }
 }

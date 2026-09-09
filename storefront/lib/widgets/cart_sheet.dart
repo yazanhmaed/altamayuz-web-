@@ -211,6 +211,8 @@ class CartContent extends StatelessWidget {
                                   const SizedBox(height: 4),
                                   Text(
                                     'اللون: ${line.variant.color} | المقاس: ${line.size}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: theme.colorScheme.onSurfaceVariant,
                                     ),
@@ -227,28 +229,31 @@ class CartContent extends StatelessWidget {
                               ),
                             ),
 
-                            // Quantity Controls
+                            // Quantity Controls. +/- get ~32px hit areas
+                            // (Icon 16 + 8 padding) so they stay comfortably
+                            // tappable on a 320px screen.
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                  horizontal: 4, vertical: 2),
                               decoration: BoxDecoration(
                                 color: theme.colorScheme.surface,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: AppColors.border),
                               ),
                               child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   InkWell(
                                     onTap: () => cartController.updateQuantity(
                                         line.key, line.quantity + 1),
                                     child: const Padding(
-                                      padding: EdgeInsets.all(4),
+                                      padding: EdgeInsets.all(8),
                                       child: Icon(Icons.add, size: 16),
                                     ),
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
+                                        horizontal: 6, vertical: 2),
                                     child: Text(
                                       '${line.quantity}',
                                       style: const TextStyle(
@@ -261,7 +266,7 @@ class CartContent extends StatelessWidget {
                                     onTap: () => cartController.updateQuantity(
                                         line.key, line.quantity - 1),
                                     child: const Padding(
-                                      padding: EdgeInsets.all(4),
+                                      padding: EdgeInsets.all(8),
                                       child: Icon(Icons.remove, size: 16),
                                     ),
                                   ),

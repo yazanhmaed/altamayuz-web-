@@ -4,6 +4,73 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../cubit/order/order_cubit.dart';
 import '../../../data/order/order_model.dart';
 
+String _money(double v) => '${v.toStringAsFixed(2)} د.أ';
+
+/// Order money summary. Nothing for orders with no stored total (older manual
+/// orders); a single total line normally; a subtotal / discount / net-total
+/// breakdown when a cart-wide quantity discount applied, so the owner can
+/// reconcile against what the customer owes on delivery.
+class _OrderTotals extends StatelessWidget {
+  final OrderModel order;
+  const _OrderTotals({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    if (order.total == null && !order.hasCartDiscount) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+
+    if (!order.hasCartDiscount) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.w700)),
+            Text(_money(order.total ?? 0),
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
+      );
+    }
+
+    final subtotal = order.subtotal ?? ((order.total ?? 0) + order.cartDiscountAmount!);
+    Widget line(String label, String value, {bool bold = false}) => Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label,
+                  style: TextStyle(
+                      fontWeight: bold ? FontWeight.w700 : FontWeight.w400)),
+              Text(value,
+                  style: TextStyle(
+                      fontWeight: bold ? FontWeight.w700 : FontWeight.w400)),
+            ],
+          ),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: [
+          line('المجموع الفرعي', _money(subtotal)),
+          line(
+            'خصم الكمية${order.cartDiscountTierMinQuantity != null ? ' (من ${order.cartDiscountTierMinQuantity} قطع)' : ''}',
+            '-${_money(order.cartDiscountAmount!)}',
+          ),
+          const Divider(height: 12),
+          line('الإجمالي المستحق', _money(order.total ?? 0), bold: true),
+          Text('* تطبّق خصم كمية على هذا الطلب',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.primary)),
+        ],
+      ),
+    );
+  }
+}
+
 class OrderCard extends StatelessWidget {
   final OrderModel order;
   const OrderCard({super.key, required this.order});
@@ -79,6 +146,7 @@ class OrderCard extends StatelessWidget {
                 ),
               ),
             ),
+            _OrderTotals(order: order),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,

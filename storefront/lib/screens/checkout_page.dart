@@ -3,6 +3,8 @@ import 'dart:developer';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../cart/cart_controller.dart';
+import '../data/cart_discount_repository.dart';
+import '../models/cart_discount.dart';
 import '../utils/jordan_phone.dart';
 import '../utils/responsive.dart';
 import 'order_success_page.dart';
@@ -24,10 +26,36 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final _streetCtrl = TextEditingController();
   bool _submitting = false;
 
+  /// Cart-wide quantity-discount tiers, read once on load. Empty until the
+  /// one-time Firestore read completes, and empty forever if none are
+  /// configured — either way `_discount` then resolves to "no discount".
+  List<CartDiscountTier> _tiers = const [];
+
   List<CartLine> get _items =>
       widget.buyNowItem != null ? [widget.buyNowItem!] : cartController.value;
 
   double get _total => _items.fold(0.0, (sum, l) => sum + l.lineTotal);
+
+  int get _totalQuantity => _items.fold(0, (sum, l) => sum + l.quantity);
+
+  /// The single cart-wide discount that applies (highest qualifying tier), or
+  /// a zero result. Display only — the server recomputes this authoritatively.
+  CartDiscountResult get _discount => computeCartDiscount(
+        tiers: _tiers,
+        totalQuantity: _totalQuantity,
+        subtotal: _total,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    loadCartDiscountTiers().then((tiers) {
+      if (mounted) setState(() => _tiers = tiers);
+    }).catchError((_) {
+      // Network hiccup reading config — proceed with no cart discount rather
+      // than blocking checkout. The server still applies any real discount.
+    });
+  }
 
   @override
   void dispose() {
@@ -164,6 +192,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         const SizedBox(height: 2),
                         Text(
                           '${line.variant.color} | مقاس ${line.size} × ${line.quantity}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -201,6 +231,27 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
             ],
           ),
+          // Cart-wide quantity discount — shown only when one actually applies
+          // (no empty row / gap otherwise).
+          if (_discount.amount > 0) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'خصم الكمية',
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                Text(
+                  '-${_discount.amount.toStringAsFixed(2)} د.أ',
+                  style: const TextStyle(
+                    color: Colors.green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -212,7 +263,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ),
               ),
               Text(
-                '${_total.toStringAsFixed(2)} د.أ',
+                '${(_total - _discount.amount).toStringAsFixed(2)} د.أ',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.primary,

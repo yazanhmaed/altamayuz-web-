@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/public_product_model.dart';
 import '../utils/responsive.dart';
-import '../widgets/cart_bar.dart';
 import '../widgets/product_card.dart';
 import '../widgets/ui_helpers.dart';
 
@@ -46,7 +45,10 @@ class CategoryProductsPage extends StatelessWidget {
               child: GridView.builder(
                 padding: const EdgeInsets.all(16),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.68,
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: 0.68,
                 ),
                 itemCount: 6,
                 itemBuilder: (_, __) => const ProductCardSkeleton(),
@@ -78,17 +80,20 @@ class CategoryProductsPage extends StatelessWidget {
                 return GridView.builder(
                   padding: const EdgeInsets.all(16),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 0.68,
+                    crossAxisCount: columns,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 0.68,
                   ),
                   itemCount: products.length,
-                  itemBuilder: (context, i) => ProductCard(product: products[i]),
+                  itemBuilder: (context, i) =>
+                      ProductCard(product: products[i]),
                 );
               },
             ),
           );
         },
       ),
-      bottomSheet: const CartBar(),
     );
   }
 }

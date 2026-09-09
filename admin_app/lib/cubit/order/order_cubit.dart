@@ -111,6 +111,12 @@ class OrderCubit extends Cubit<OrderState> {
       status: editingOrder?.status ?? OrderStatus.pending,
       deliveryDate: deliveryDateCtrl.text.trim(),
       source: editingOrder?.source ?? 'manual',
+      // Money fields are owned by the storefront function; carry them through
+      // an owner edit unchanged (null for manual orders).
+      subtotal: editingOrder?.subtotal,
+      cartDiscountAmount: editingOrder?.cartDiscountAmount,
+      cartDiscountTierMinQuantity: editingOrder?.cartDiscountTierMinQuantity,
+      total: editingOrder?.total,
     );
   }
 

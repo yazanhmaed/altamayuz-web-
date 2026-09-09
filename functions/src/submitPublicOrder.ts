@@ -17,6 +17,62 @@ interface RequestData {
   items: CartItem[];
 }
 
+interface CartDiscountTier {
+  minQuantity: number;
+  type: "percentage" | "fixed";
+  value: number;
+}
+
+// Defensive sanitization of the `settings/cartDiscountTiers` document. The
+// server assumes NO upstream source has validated this — not the admin app,
+// not a manual Firestore Console edit. Discard: minQuantity < 2; percentage
+// value outside 0–100; fixed value <= 0. Then sort by minQuantity ascending
+// ourselves rather than trusting the stored order.
+function sanitizeTiers(raw: unknown): CartDiscountTier[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const clean: CartDiscountTier[] = [];
+  for (const t of list) {
+    if (!t || typeof t !== "object") continue;
+    const minQuantity = Number((t as any).minQuantity);
+    const type = (t as any).type;
+    const value = Number((t as any).value);
+    if (!Number.isFinite(minQuantity) || minQuantity < 2) continue;
+    if (!Number.isFinite(value)) continue;
+    if (type === "percentage") {
+      if (value < 0 || value > 100) continue;
+    } else if (type === "fixed") {
+      if (value <= 0) continue;
+    } else {
+      continue;
+    }
+    clean.push({ minQuantity, type, value });
+  }
+  clean.sort((a, b) => a.minQuantity - b.minQuantity);
+  return clean;
+}
+
+// Same tier-selection + clamp math as the storefront's computeCartDiscount:
+// exactly one tier applies (highest minQuantity the cart's total quantity
+// meets), tiers never stack, and a `fixed` discount larger than the subtotal
+// is clamped down to exactly the subtotal (net total floors at 0, never
+// negative). Returns the discount amount and the applied tier's minQuantity
+// (or null).
+function computeCartDiscount(
+  tiers: CartDiscountTier[],
+  totalQuantity: number,
+  subtotal: number
+): { amount: number; tierMinQuantity: number | null } {
+  const applicable = tiers
+    .filter((t) => totalQuantity >= t.minQuantity)
+    .sort((a, b) => a.minQuantity - b.minQuantity);
+  if (applicable.length === 0) return { amount: 0, tierMinQuantity: null };
+  const tier = applicable[applicable.length - 1];
+  const rawAmount =
+    tier.type === "percentage" ? subtotal * (tier.value / 100) : tier.value;
+  const amount = Math.min(Math.max(rawAmount, 0), subtotal);
+  return { amount, tierMinQuantity: tier.minQuantity };
+}
+
 // App Check is intentionally not enforced: the owner reviews every order
 // before dispatch, so client tampering is caught manually. Server-side price
 // derivation and the per-phone rate limit below are kept — they cost nothing
@@ -54,6 +110,16 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
       "تم استلام طلب منك مؤخرًا، الرجاء الانتظار قليلًا قبل إرسال طلب آخر."
     );
   }
+
+  // Cart-wide quantity-discount tiers. This is config, not part of the
+  // inventory-consistency invariant the transaction protects, so a plain
+  // read outside the transaction is fine. A missing document / missing
+  // `tiers` field just means "no discount".
+  const tiersSnap = await db
+    .collection("settings")
+    .doc("cartDiscountTiers")
+    .get();
+  const cartDiscountTiers = sanitizeTiers(tiersSnap.data()?.tiers);
 
   const orderRef = db.collection("orders").doc();
 
@@ -125,10 +191,29 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
       });
     }
 
-    const total = orderItems.reduce(
+    // Pre-discount sum of the order lines (each unitPrice is already the
+    // server-derived salePrice/price, so per-product discounts are baked in).
+    const subtotal = orderItems.reduce(
       (sum, it) => sum + it.unitPrice * it.quantity,
       0
     );
+
+    // Cart-wide quantity discount, recomputed from scratch server-side — the
+    // client never sends a discount or total. Operates on the already-
+    // discounted subtotal; a product on sale and this discount can both apply.
+    const totalQuantity = orderItems.reduce(
+      (sum, it) => sum + it.quantity,
+      0
+    );
+    const { amount: cartDiscountAmount, tierMinQuantity } = computeCartDiscount(
+      cartDiscountTiers,
+      totalQuantity,
+      subtotal
+    );
+
+    // `total` now means the NET amount owed (subtotal minus the cart discount)
+    // — the only figure that matters for payment/delivery.
+    const total = subtotal - cartDiscountAmount;
 
     tx.set(orderRef, {
       id: orderRef.id,
@@ -140,6 +225,9 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
       destination: "",
       items: orderItems,
       qrCode: [],
+      subtotal,
+      cartDiscountAmount,
+      cartDiscountTierMinQuantity: tierMinQuantity,
       total,
       status: "pending",
       source: "storefront",

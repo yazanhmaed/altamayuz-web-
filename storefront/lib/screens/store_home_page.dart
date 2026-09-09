@@ -4,6 +4,7 @@ import '../cart/cart_controller.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
+import '../widgets/cart_discount_banner.dart';
 import '../widgets/category_card.dart';
 import '../widgets/product_card.dart';
 import '../widgets/store_footer.dart';
@@ -129,6 +130,9 @@ class _StoreHomePageState extends State<StoreHomePage> {
                 final columns = Responsive.gridColumns(constraints.maxWidth);
                 return CustomScrollView(
                   slivers: [
+                    // Cart-wide quantity-discount promo. Self-hiding: renders
+                    // nothing when no tiers are configured (no gap, no flicker).
+                    const SliverToBoxAdapter(child: CartDiscountBanner()),
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),

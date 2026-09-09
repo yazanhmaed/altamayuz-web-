@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'orders/order_list.dart';
 import 'products/product_list.dart';
+import 'settings/cart_discount_settings.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,7 +14,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tabIndex = 0;
 
-  static const _screens = [ProductListScreen(), OrderListScreen()];
+  static const _screens = [
+    ProductListScreen(),
+    OrderListScreen(),
+    CartDiscountSettingsScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.inventory_2_outlined), label: 'المنتجات'),
           NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'الطلبات'),
+          NavigationDestination(icon: Icon(Icons.percent_outlined), label: 'الخصومات'),
         ],
       ),
     );
