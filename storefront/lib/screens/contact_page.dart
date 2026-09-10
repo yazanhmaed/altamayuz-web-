@@ -101,9 +101,11 @@ class ContactPage extends StatelessWidget {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest
+                      // ignore: deprecated_member_use
                       .withOpacity(0.4),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
+                    // ignore: deprecated_member_use
                     color: AppColors.border.withOpacity(0.5),
                   ),
                 ),
@@ -157,6 +159,7 @@ class _ContactOptionCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
         side: BorderSide(
+          // ignore: deprecated_member_use
           color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.6),
         ),
       ),
@@ -167,6 +170,7 @@ class _ContactOptionCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: iconColor.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),

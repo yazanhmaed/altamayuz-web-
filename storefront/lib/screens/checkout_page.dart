@@ -128,10 +128,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
+          // ignore: deprecated_member_use
           color: theme.colorScheme.outlineVariant.withOpacity(0.5),
         ),
         boxShadow: [
           BoxShadow(
+            // ignore: deprecated_member_use
             color: Colors.black.withOpacity(0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
@@ -404,9 +406,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
+              // ignore: deprecated_member_use
               color: theme.colorScheme.primary.withOpacity(0.06),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
+                // ignore: deprecated_member_use
                 color: theme.colorScheme.primary.withOpacity(0.15),
               ),
             ),

@@ -111,6 +111,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       // Home-only, same boundary as StoreFooter. Flutter docks the FAB above
       // Scaffold.bottomSheet (the CartBar), so it won't collide with it.
       floatingActionButton: const WhatsAppFab(),
@@ -246,6 +247,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                               color: Theme.of(context)
                                   .colorScheme
                                   .onSurfaceVariant
+                                  // ignore: deprecated_member_use
                                   .withOpacity(0.7),
                               fontSize: 14,
                             ),

@@ -158,7 +158,7 @@ class PriceDisplay extends StatelessWidget {
     required this.product,
     this.fontSize = 14,
     this.originalFontSize,
-    this.decimals = 0,
+    this.decimals = 2,
     this.baseColor,
   });
 

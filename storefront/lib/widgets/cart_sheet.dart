@@ -135,6 +135,7 @@ class CartContent extends StatelessWidget {
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
                               color:
+                                  // ignore: deprecated_member_use
                                   theme.colorScheme.primary.withOpacity(0.08),
                               shape: BoxShape.circle,
                             ),

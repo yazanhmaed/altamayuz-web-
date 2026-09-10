@@ -38,6 +38,7 @@ class ShippingPolicyPage extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                     side: BorderSide(
+                      // ignore: deprecated_member_use
                       color: theme.colorScheme.outlineVariant.withOpacity(0.5),
                     ),
                   ),
@@ -48,6 +49,7 @@ class ShippingPolicyPage extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
+                            // ignore: deprecated_member_use
                             color: theme.colorScheme.primary.withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
