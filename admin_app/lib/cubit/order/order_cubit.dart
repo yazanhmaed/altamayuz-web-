@@ -307,16 +307,41 @@ class OrderCubit extends Cubit<OrderState> {
     try {
       if (newStatus == OrderStatus.returned) {
         await _db.runTransaction((tx) async {
-          // (1) aggregate quantities per product/color/size first
+          final orderRef = _db.collection('orders').doc(order.id);
+
+          // (1) read the order live inside the transaction — never trust the
+          // in-memory `order`. This is what stops a duplicate/concurrent
+          // "تعيين: مرتجع" tap (or a Firestore retry) from double-restocking.
+          final orderSnap = await tx.get(orderRef);
+          if (!orderSnap.exists) throw Exception('الطلب غير موجود.');
+
+          final itemsRaw = List<Map<String, dynamic>>.from(
+            (orderSnap.data()!['items'] as List)
+                .map((e) => Map<String, dynamic>.from(e as Map)),
+          );
+
+          // (2) aggregate quantities per product/color/size — but only for
+          // items NOT already individually `returned` (those were restocked
+          // once already by updateItemStatus; adding them again would
+          // double-count).
           final Map<String, Map<String, Map<String, int>>> restockMap = {};
-          for (final item in order.items) {
+          for (final m in itemsRaw) {
+            final itemStatus = ItemStatus.values.firstWhere(
+              (s) => s.englishName == m['status'],
+              orElse: () => ItemStatus.pending,
+            );
+            if (itemStatus == ItemStatus.returned) continue;
+            final productId = m['productId'] as String;
+            final color = m['color'] as String;
+            final size = m['size'] as String;
+            final quantity = (m['quantity'] as num).toInt();
             restockMap
-                .putIfAbsent(item.productId, () => {})
-                .putIfAbsent(item.color, () => {})
-                .update(item.size, (v) => v + item.quantity, ifAbsent: () => item.quantity);
+                .putIfAbsent(productId, () => {})
+                .putIfAbsent(color, () => {})
+                .update(size, (v) => v + quantity, ifAbsent: () => quantity);
           }
 
-          // (2) read each product once
+          // (3) read each affected product once
           final Map<String, Map<String, dynamic>> productData = {};
           for (final productId in restockMap.keys) {
             final productRef = _db.collection('products').doc(productId);
@@ -327,7 +352,7 @@ class OrderCubit extends Cubit<OrderState> {
             productData[productId] = Map<String, dynamic>.from(productSnap.data()!);
           }
 
-          // (3) apply all increments, single tx.update() per product
+          // (4) apply all increments, single tx.update() per product
           for (final productId in restockMap.keys) {
             final productRef = _db.collection('products').doc(productId);
             final data = productData[productId]!;
@@ -349,9 +374,13 @@ class OrderCubit extends Cubit<OrderState> {
             });
           }
 
-          // (4) update the order itself
-          final orderRef = _db.collection('orders').doc(order.id);
+          // (5) every item ends up `returned`, whether or not it was restocked
+          // by this action, plus the order's own status.
+          for (final m in itemsRaw) {
+            m['status'] = ItemStatus.returned.englishName;
+          }
           tx.update(orderRef, {
+            'items': itemsRaw,
             'status': newStatus.englishName,
             'updatedAt': DateTime.now().toIso8601String(),
           });
@@ -364,7 +393,91 @@ class OrderCubit extends Cubit<OrderState> {
       }
 
       order.status = newStatus;
+      if (newStatus == OrderStatus.returned) {
+        for (final item in order.items) {
+          item.status = ItemStatus.returned;
+        }
+      }
       emit(OrderSuccess('تم تحديث حالة الطلب.'));
+      emit(OrderLoaded(orders));
+    } catch (e) {
+      emit(OrderError(e.toString()));
+    }
+  }
+
+  /// Changes a single [OrderItem]'s status within [order], restocking only
+  /// that one item's quantity when it transitions into `returned` from a
+  /// non-`returned` status. All other items in the order are untouched, and
+  /// the parent order's own `status` is left exactly as-is.
+  Future<void> updateItemStatus({
+    required OrderModel order,
+    required String itemId,
+    required ItemStatus newStatus,
+  }) async {
+    emit(OrderFormLoadChanged());
+    try {
+      await _db.runTransaction((tx) async {
+        final orderRef = _db.collection('orders').doc(order.id);
+        final orderSnap = await tx.get(orderRef);
+        if (!orderSnap.exists) throw Exception('الطلب غير موجود.');
+
+        final itemsRaw = List<Map<String, dynamic>>.from(
+          (orderSnap.data()!['items'] as List)
+              .map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+        final index = itemsRaw.indexWhere((m) => m['itemId'] == itemId);
+        if (index == -1) throw Exception('العنصر غير موجود.');
+
+        final currentStatus = ItemStatus.values.firstWhere(
+          (s) => s.englishName == itemsRaw[index]['status'],
+          orElse: () => ItemStatus.pending,
+        );
+
+        // Re-checked against the *live* document on every attempt (including
+        // Firestore's own automatic transaction retries), not the possibly-
+        // stale in-memory `order` passed into this method. This is what
+        // actually prevents double-restocking under concurrent/duplicate calls.
+        if (currentStatus == newStatus) return;
+
+        final shouldRestock = newStatus == ItemStatus.returned &&
+            currentStatus != ItemStatus.returned;
+
+        if (shouldRestock) {
+          final productId = itemsRaw[index]['productId'] as String;
+          final color = itemsRaw[index]['color'] as String;
+          final size = itemsRaw[index]['size'] as String;
+          final quantity = (itemsRaw[index]['quantity'] as num).toInt();
+
+          final productRef = _db.collection('products').doc(productId);
+          final productSnap = await tx.get(productRef);
+          if (!productSnap.exists) {
+            throw Exception('المنتج ($productId) غير موجود.');
+          }
+          final stock = Map<String, dynamic>.from(
+            (productSnap.data()!['stock'] as Map),
+          );
+          final colorMap =
+              Map<String, dynamic>.from(stock[color] ?? <String, dynamic>{});
+          final current = (colorMap[size] as num?)?.toInt() ?? 0;
+          colorMap[size] = current + quantity;
+          stock[color] = colorMap;
+
+          tx.update(productRef, {
+            'stock': stock,
+            'updatedAt': DateTime.now().toIso8601String(),
+          });
+        }
+
+        itemsRaw[index]['status'] = newStatus.englishName;
+        tx.update(orderRef, {
+          'items': itemsRaw,
+          'updatedAt': DateTime.now().toIso8601String(),
+        });
+      });
+
+      final idx = order.items.indexWhere((i) => i.itemId == itemId);
+      if (idx != -1) order.items[idx].status = newStatus;
+      emit(OrderSuccess('تم تحديث حالة العنصر.'));
       emit(OrderLoaded(orders));
     } catch (e) {
       emit(OrderError(e.toString()));

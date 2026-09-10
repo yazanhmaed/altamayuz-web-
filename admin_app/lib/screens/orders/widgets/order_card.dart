@@ -138,25 +138,19 @@ class OrderCard extends StatelessWidget {
             Text('${order.address} - ${order.area}'),
             if (order.street.isNotEmpty) Text(order.street),
             const Divider(),
-            ...order.items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '${item.productName ?? item.productId} — ${item.color} — مقاس ${item.size} × ${item.quantity} (${item.status.englishName})',
-                ),
-              ),
-            ),
+            _OrderItemsList(order: order, cubit: cubit),
             _OrderTotals(order: order),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: [
-                for (final status in OrderStatus.values)
-                  if (status != order.status)
-                    OutlinedButton(
-                      onPressed: () => cubit.updateOrderStatus(order: order, newStatus: status),
-                      child: Text('تعيين: ${status.englishName}'),
-                    ),
+                if (order.status != OrderStatus.completed)
+                  for (final status in OrderStatus.values)
+                    if (status != order.status)
+                      OutlinedButton(
+                        onPressed: () => cubit.updateOrderStatus(order: order, newStatus: status),
+                        child: Text('تعيين: ${status.englishName}'),
+                      ),
                 OutlinedButton.icon(
                   onPressed: () => cubit.updateOrderQrCode(order: order, context: context),
                   icon: const Icon(Icons.qr_code_scanner, size: 16),
@@ -167,6 +161,92 @@ class OrderCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+Color _itemStatusColor(ItemStatus status) {
+  switch (status) {
+    case ItemStatus.pending:
+      return Colors.orange;
+    case ItemStatus.delivered:
+      return Colors.green;
+    case ItemStatus.returned:
+      return Colors.red;
+  }
+}
+
+/// Per-item rows with "تسليم"/"إرجاع" actions. Tracks in-flight item ids so a
+/// rapid double-tap can't fire two `updateItemStatus` calls for the same item
+/// before the first resolves. This is UX polish only — the real double-restock
+/// guard is the live re-check inside `updateItemStatus`'s transaction (this set
+/// resets on reload and does nothing across tabs/devices).
+class _OrderItemsList extends StatefulWidget {
+  final OrderModel order;
+  final OrderCubit cubit;
+  const _OrderItemsList({required this.order, required this.cubit});
+
+  @override
+  State<_OrderItemsList> createState() => _OrderItemsListState();
+}
+
+class _OrderItemsListState extends State<_OrderItemsList> {
+  final Set<String> _pendingItemIds = {};
+
+  Future<void> _update(String itemId, ItemStatus newStatus) async {
+    if (_pendingItemIds.contains(itemId)) return;
+    setState(() => _pendingItemIds.add(itemId));
+    try {
+      await widget.cubit.updateItemStatus(
+        order: widget.order,
+        itemId: itemId,
+        newStatus: newStatus,
+      );
+    } finally {
+      if (mounted) setState(() => _pendingItemIds.remove(itemId));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final item in widget.order.items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${item.productName ?? item.productId} — ${item.color} — مقاس ${item.size} × ${item.quantity}',
+                  ),
+                ),
+                if (item.status == ItemStatus.pending) ...[
+                  TextButton(
+                    onPressed: _pendingItemIds.contains(item.itemId)
+                        ? null
+                        : () => _update(item.itemId, ItemStatus.delivered),
+                    child: const Text('تسليم'),
+                  ),
+                  TextButton(
+                    onPressed: _pendingItemIds.contains(item.itemId)
+                        ? null
+                        : () => _update(item.itemId, ItemStatus.returned),
+                    child: const Text('إرجاع'),
+                  ),
+                ] else
+                  Text(
+                    item.status.englishName,
+                    style: TextStyle(
+                      color: _itemStatusColor(item.status),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

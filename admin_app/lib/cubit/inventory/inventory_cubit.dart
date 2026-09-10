@@ -11,36 +11,29 @@ import 'package:image_picker/image_picker.dart';
 import '../../data/product/product_model.dart';
 import 'inventory_state.dart';
 
-/// One (size -> quantity) row inside a color's stock table, used by the
-/// add/edit-product form.
+/// One quantity field, positioned at some index that corresponds to the
+/// global size at the same index in [InventoryCubit.globalSizeCtrls].
 class SizeQtyRow {
-  final TextEditingController sizeCtrl;
   final TextEditingController qtyCtrl;
-
-  SizeQtyRow({String size = '', String qty = ''})
-    : sizeCtrl = TextEditingController(text: size),
-      qtyCtrl = TextEditingController(text: qty);
-
-  void dispose() {
-    sizeCtrl.dispose();
-    qtyCtrl.dispose();
-  }
+  SizeQtyRow({String qty = ''}) : qtyCtrl = TextEditingController(text: qty);
+  void dispose() => qtyCtrl.dispose();
 }
 
-/// One color row inside the add/edit-product form: a color name, its size
-/// table, and (optionally) an already-uploaded image URL.
+/// One color row inside the add/edit-product form: a color name, its
+/// per-size quantity fields (aligned by index to
+/// [InventoryCubit.globalSizeCtrls]), and (optionally) an already-uploaded
+/// image URL.
 class ColorFormRow {
   final TextEditingController colorCtrl;
-  final List<SizeQtyRow> sizes;
+  final List<SizeQtyRow> qtyCtrls = [];
   String? existingImageUrl;
 
   ColorFormRow({String color = '', this.existingImageUrl})
-    : colorCtrl = TextEditingController(text: color),
-      sizes = [SizeQtyRow()];
+    : colorCtrl = TextEditingController(text: color);
 
   void dispose() {
     colorCtrl.dispose();
-    for (final s in sizes) {
+    for (final s in qtyCtrls) {
       s.dispose();
     }
   }
@@ -65,7 +58,9 @@ class RestockRowControllers {
 }
 
 class InventoryCubit extends Cubit<InventoryState> {
-  InventoryCubit() : super(InventoryInitial());
+  InventoryCubit() : super(InventoryInitial()) {
+    colorRows.first.qtyCtrls.add(SizeQtyRow());
+  }
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -80,6 +75,10 @@ class InventoryCubit extends Cubit<InventoryState> {
   final categoryCtrl = TextEditingController(text: 'عام');
   bool addingNewCategory = false;
   final List<ColorFormRow> colorRows = [ColorFormRow()];
+
+  /// The product-wide size labels. Every [ColorFormRow.qtyCtrls] list is
+  /// kept the same length and order as this list, aligned by index.
+  final List<TextEditingController> globalSizeCtrls = [TextEditingController()];
   final Map<String, XFile?> pendingColorImages = {}; // color -> newly picked, not yet uploaded
   bool isActive = true;
   bool isFeatured = false;
@@ -143,9 +142,15 @@ class InventoryCubit extends Cubit<InventoryState> {
     for (final row in colorRows) {
       row.dispose();
     }
+    for (final c in globalSizeCtrls) {
+      c.dispose();
+    }
+    globalSizeCtrls
+      ..clear()
+      ..add(TextEditingController());
     colorRows
       ..clear()
-      ..add(ColorFormRow());
+      ..add(ColorFormRow()..qtyCtrls.add(SizeQtyRow()));
     pendingColorImages.clear();
     emit(InventoryFormChanged());
   }
@@ -165,21 +170,33 @@ class InventoryCubit extends Cubit<InventoryState> {
       row.dispose();
     }
     colorRows.clear();
+    for (final c in globalSizeCtrls) {
+      c.dispose();
+    }
+    globalSizeCtrls.clear();
     pendingColorImages.clear();
 
+    // Global size list = union of every color's recorded sizes, sorted.
+    final unionSizes = <String>{
+      for (final color in product.colors) ...(product.stock[color] ?? const {}).keys,
+    }.toList()
+      ..sort();
+    if (unionSizes.isEmpty) unionSizes.add('');
+    for (final size in unionSizes) {
+      globalSizeCtrls.add(TextEditingController(text: size));
+    }
+
     if (product.colors.isEmpty) {
-      colorRows.add(ColorFormRow());
+      colorRows.add(
+        ColorFormRow()
+          ..qtyCtrls.addAll(unionSizes.map((_) => SizeQtyRow())),
+      );
     } else {
       for (final color in product.colors) {
         final row = ColorFormRow(color: color, existingImageUrl: product.imageFor(color));
-        final sizes = product.stock[color] ?? {};
-        row.sizes.clear();
-        if (sizes.isEmpty) {
-          row.sizes.add(SizeQtyRow());
-        } else {
-          sizes.forEach((size, qty) {
-            row.sizes.add(SizeQtyRow(size: size, qty: qty.toString()));
-          });
+        final sizes = product.stock[color] ?? const {};
+        for (final size in unionSizes) {
+          row.qtyCtrls.add(SizeQtyRow(qty: (sizes[size] ?? 0).toString()));
         }
         colorRows.add(row);
       }
@@ -188,7 +205,30 @@ class InventoryCubit extends Cubit<InventoryState> {
   }
 
   void addColorRow() {
-    colorRows.add(ColorFormRow());
+    final row = ColorFormRow();
+    row.qtyCtrls.addAll(List.generate(globalSizeCtrls.length, (_) => SizeQtyRow()));
+    colorRows.add(row);
+    emit(InventoryAddRow());
+  }
+
+  void addGlobalSizeRow() {
+    globalSizeCtrls.add(TextEditingController());
+    for (final row in colorRows) {
+      row.qtyCtrls.add(SizeQtyRow());
+    }
+    emit(InventoryAddRow());
+  }
+
+  void removeGlobalSizeRow(int index) {
+    if (index < 0 || index >= globalSizeCtrls.length || globalSizeCtrls.length <= 1) return;
+    globalSizeCtrls[index].dispose();
+    globalSizeCtrls.removeAt(index);
+    for (final row in colorRows) {
+      if (index < row.qtyCtrls.length) {
+        row.qtyCtrls[index].dispose();
+        row.qtyCtrls.removeAt(index);
+      }
+    }
     emit(InventoryAddRow());
   }
 
@@ -196,21 +236,6 @@ class InventoryCubit extends Cubit<InventoryState> {
     if (index < 0 || index >= colorRows.length || colorRows.length <= 1) return;
     colorRows[index].dispose();
     colorRows.removeAt(index);
-    emit(InventoryAddRow());
-  }
-
-  void addSizeRow(int colorIndex) {
-    if (colorIndex < 0 || colorIndex >= colorRows.length) return;
-    colorRows[colorIndex].sizes.add(SizeQtyRow());
-    emit(InventoryAddRow());
-  }
-
-  void removeSizeRow(int colorIndex, int sizeIndex) {
-    if (colorIndex < 0 || colorIndex >= colorRows.length) return;
-    final sizes = colorRows[colorIndex].sizes;
-    if (sizeIndex < 0 || sizeIndex >= sizes.length || sizes.length <= 1) return;
-    sizes[sizeIndex].dispose();
-    sizes.removeAt(sizeIndex);
     emit(InventoryAddRow());
   }
 
@@ -277,10 +302,11 @@ class InventoryCubit extends Cubit<InventoryState> {
       if (row.existingImageUrl != null) imageUrls[color] = row.existingImageUrl!;
 
       final sizeMap = <String, int>{};
-      for (final sizeRow in row.sizes) {
-        final size = sizeRow.sizeCtrl.text.trim();
+      for (var i = 0; i < globalSizeCtrls.length; i++) {
+        final size = globalSizeCtrls[i].text.trim();
         if (size.isEmpty) continue;
-        sizeMap[size] = int.tryParse(sizeRow.qtyCtrl.text.trim()) ?? 0;
+        if (i >= row.qtyCtrls.length) continue;
+        sizeMap[size] = int.tryParse(row.qtyCtrls[i].qtyCtrl.text.trim()) ?? 0;
       }
       stock[color] = sizeMap;
     }
@@ -602,6 +628,9 @@ class InventoryCubit extends Cubit<InventoryState> {
     categoryCtrl.dispose();
     for (final row in colorRows) {
       row.dispose();
+    }
+    for (final c in globalSizeCtrls) {
+      c.dispose();
     }
     for (final r in restockRows) {
       r.dispose();

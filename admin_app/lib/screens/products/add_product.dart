@@ -42,7 +42,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(isEditing ? 'تعديل منتج' : 'إضافة منتج')),
-      body: BlocListener<InventoryCubit, InventoryState>(
+      body: BlocConsumer<InventoryCubit, InventoryState>(
         listener: (context, state) {
           if (state is InventorySuccess) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
@@ -51,7 +51,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
           }
         },
-        child: Form(
+        builder: (context, state) {
+        final isSaving = state is InventoryLoading;
+        return Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -185,6 +187,49 @@ class _AddProductScreenState extends State<AddProductScreen> {
               const SizedBox(height: 20),
               Row(
                 children: [
+                  Text('المقاسات', style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      cubit.addGlobalSizeRow();
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('إضافة مقاس'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: List.generate(cubit.globalSizeCtrls.length, (i) {
+                  return SizedBox(
+                    width: 110,
+                    child: TextFormField(
+                      controller: cubit.globalSizeCtrls[i],
+                      decoration: InputDecoration(
+                        labelText: 'مقاس',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: cubit.globalSizeCtrls.length > 1
+                              ? () {
+                                  cubit.removeGlobalSizeRow(i);
+                                  setState(() {});
+                                }
+                              : null,
+                        ),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
                   Text('الألوان والمقاسات', style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
                   TextButton.icon(
@@ -255,43 +300,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        ...List.generate(row.sizes.length, (sizeIndex) {
-                          final sizeRow = row.sizes[sizeIndex];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: sizeRow.sizeCtrl,
-                                    decoration: const InputDecoration(labelText: 'المقاس', border: OutlineInputBorder()),
-                                  ),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: List.generate(row.qtyCtrls.length, (i) {
+                            final sizeLabel = i < cubit.globalSizeCtrls.length
+                                ? cubit.globalSizeCtrls[i].text.trim()
+                                : '';
+                            return SizedBox(
+                              width: 110,
+                              child: TextFormField(
+                                controller: row.qtyCtrls[i].qtyCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: sizeLabel.isEmpty ? 'مقاس ${i + 1}' : 'مقاس $sizeLabel',
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: sizeRow.qtyCtrl,
-                                    keyboardType: TextInputType.number,
-                                    decoration: const InputDecoration(labelText: 'الكمية', border: OutlineInputBorder()),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline),
-                                  onPressed: row.sizes.length > 1
-                                      ? () => cubit.removeSizeRow(colorIndex, sizeIndex)
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: () => cubit.addSizeRow(colorIndex),
-                            icon: const Icon(Icons.add),
-                            label: const Text('إضافة مقاس'),
-                          ),
+                              ),
+                            );
+                          }),
                         ),
                       ],
                     ),
@@ -300,16 +328,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
               }),
               const SizedBox(height: 24),
               FilledButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    cubit.saveProduct();
-                  }
-                },
-                child: const Text('حفظ المنتج'),
+                onPressed: isSaving
+                    ? null
+                    : () {
+                        if (_formKey.currentState!.validate()) {
+                          cubit.saveProduct();
+                        }
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('حفظ المنتج'),
               ),
             ],
           ),
-        ),
+        );
+        },
       ),
     );
   }

@@ -26,7 +26,7 @@ class _RestockScreenState extends State<RestockScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text('إضافة كمية — ${widget.product.name}')),
-      body: BlocListener<InventoryCubit, InventoryState>(
+      body: BlocConsumer<InventoryCubit, InventoryState>(
         listener: (context, state) {
           if (state is InventorySuccess) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
@@ -35,7 +35,9 @@ class _RestockScreenState extends State<RestockScreen> {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
           }
         },
-        child: ListView(
+        builder: (context, state) {
+        final isSaving = state is InventoryLoading;
+        return ListView(
           padding: const EdgeInsets.all(16),
           children: [
             ...List.generate(cubit.restockRows.length, (index) {
@@ -80,11 +82,18 @@ class _RestockScreenState extends State<RestockScreen> {
             ),
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: cubit.submitRestock,
-              child: const Text('تأكيد الإضافة'),
+              onPressed: isSaving ? null : cubit.submitRestock,
+              child: isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('تأكيد الإضافة'),
             ),
           ],
-        ),
+        );
+        },
       ),
     );
   }

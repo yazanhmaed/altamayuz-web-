@@ -33,7 +33,7 @@ class CreateOrderScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text(isEditing ? 'تعديل طلب' : 'طلب جديد')),
-      body: BlocListener<OrderCubit, OrderState>(
+      body: BlocConsumer<OrderCubit, OrderState>(
         listener: (context, state) {
           if (state is OrderSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
@@ -42,7 +42,9 @@ class CreateOrderScreen extends StatelessWidget {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
           }
         },
-        child: ListView(
+        builder: (context, state) {
+        final isSaving = state is OrderLoading;
+        return ListView(
           padding: const EdgeInsets.all(16),
           children: [
             Labeled(
@@ -127,11 +129,18 @@ class CreateOrderScreen extends StatelessWidget {
             }),
             const SizedBox(height: 24),
             FilledButton(
-              onPressed: cubit.submitOrder,
-              child: const Text('حفظ الطلب'),
+              onPressed: isSaving ? null : cubit.submitOrder,
+              child: isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('حفظ الطلب'),
             ),
           ],
-        ),
+        );
+        },
       ),
     );
   }
