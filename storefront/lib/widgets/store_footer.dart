@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../config/store_info.dart';
-import '../screens/about_page.dart';
-import '../screens/categories_page.dart';
-import '../screens/category_products_page.dart';
-import '../screens/contact_page.dart';
-import '../screens/shipping_policy_page.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import 'social_icons_row.dart';
@@ -46,49 +42,25 @@ class StoreFooter extends StatelessWidget {
                     // Opens the full category list; each row drills into the
                     // matching CategoryProductsPage. Same category set the home
                     // chip row shows.
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const CategoriesPage(),
-                      ),
-                    ),
+                    onTap: () => context.push('/categories'),
                   ),
                   _FooterLink(
                     label: 'الخصومات',
                     // Discounts have landed (PublicProductModel.salePrice), so
                     // this goes straight to the on-sale grid.
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const CategoryProductsPage(
-                          onlyOnSale: true,
-                          titleOverride: 'عروض خاصة',
-                        ),
-                      ),
-                    ),
+                    onTap: () => context.push('/offers'),
                   ),
                   _FooterLink(
                     label: 'من نحن',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AboutPage()),
-                    ),
+                    onTap: () => context.push('/about'),
                   ),
                   _FooterLink(
                     label: 'تواصل معنا',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ContactPage()),
-                    ),
+                    onTap: () => context.push('/contact'),
                   ),
                   _FooterLink(
                     label: 'سياسة الشحن والتوصيل',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ShippingPolicyPage(),
-                      ),
-                    ),
+                    onTap: () => context.push('/shipping-policy'),
                   ),
                 ],
               ),

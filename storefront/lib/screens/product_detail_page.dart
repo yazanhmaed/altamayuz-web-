@@ -1,18 +1,29 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import '../cart/cart_controller.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/product_card.dart';
 import '../widgets/ui_helpers.dart';
-import 'checkout_page.dart';
 import 'image_viewer_page.dart';
 
 class ProductDetailPage extends StatefulWidget {
-  final PublicProductModel product;
-  const ProductDetailPage({super.key, required this.product});
+  final String productId;
+
+  /// Already-loaded model, when the caller has one (e.g. a tap on a
+  /// [ProductCard] that's already rendering from a loaded list). When null —
+  /// a shared link, a fresh page load, or browser back/forward reconstructing
+  /// state — the page fetches the product itself by [productId].
+  final PublicProductModel? preloadedProduct;
+
+  const ProductDetailPage({
+    super.key,
+    required this.productId,
+    this.preloadedProduct,
+  });
   @override
   State<ProductDetailPage> createState() => _ProductDetailPageState();
 }
@@ -20,12 +31,45 @@ class ProductDetailPage extends StatefulWidget {
 class _ProductDetailPageState extends State<ProductDetailPage> {
   late ProductVariant _selectedVariant;
   String? _selectedSize;
+  PublicProductModel? _product;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _selectedVariant = widget.product.variants.firstWhere((v) => v.isAvailable,
-        orElse: () => widget.product.variants.first);
+    final preloaded = widget.preloadedProduct;
+    if (preloaded != null) {
+      _product = preloaded;
+      _selectedVariant = preloaded.variants.firstWhere((v) => v.isAvailable,
+          orElse: () => preloaded.variants.first);
+      _loading = false;
+    } else {
+      _fetchProduct();
+    }
+  }
+
+  Future<void> _fetchProduct() async {
+    PublicProductModel? product;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('products')
+          .doc(widget.productId)
+          .get();
+      final data = doc.data();
+      product =
+          data == null ? null : PublicProductModel.fromProductDoc(doc.id, data);
+    } catch (_) {
+      product = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _product = product;
+      if (product != null) {
+        _selectedVariant = product.variants.firstWhere((v) => v.isAvailable,
+            orElse: () => product!.variants.first);
+      }
+      _loading = false;
+    });
   }
 
   void _selectColor(ProductVariant v) {
@@ -88,8 +132,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     );
   }
 
-  Widget _buildDetails(BuildContext context) {
-    final product = widget.product;
+  Widget _buildDetails(BuildContext context, PublicProductModel product) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -180,24 +223,20 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               ? null
               : () {
                   HapticFeedback.selectionClick();
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CheckoutPage(
-                        buyNowItem: CartLine(
-                          product: product,
-                          variant: _selectedVariant,
-                          size: _selectedSize!,
-                        ),
-                      ),
+                  context.push(
+                    '/checkout',
+                    extra: CartLine(
+                      product: product,
+                      variant: _selectedVariant,
+                      size: _selectedSize!,
                     ),
                   );
                 },
           child: const Text('اشترِ الآن'),
         ),
-        // Category-based related products. Computed once from widget.product —
-        // does not react to the color/size selection above. Hides itself
-        // entirely when nothing qualifies.
+        // Category-based related products. Computed once from the loaded
+        // product — does not react to the color/size selection above. Hides
+        // itself entirely when nothing qualifies.
         _RelatedProducts(
           category: product.category,
           excludeId: product.id,
@@ -208,8 +247,20 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final product = _product;
+    if (product == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('المنتج غير موجود')),
+      );
+    }
     return Scaffold(
-      appBar: AppBar(title: Text(widget.product.name)),
+      appBar: AppBar(title: Text(product.name)),
       body: ResponsiveCenter(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -224,7 +275,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                     Expanded(
                         flex: 5,
                         child: SingleChildScrollView(
-                            child: _buildDetails(context))),
+                            child: _buildDetails(context, product))),
                   ],
                 ),
               );
@@ -234,7 +285,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               children: [
                 _buildImage(),
                 const SizedBox(height: 16),
-                _buildDetails(context)
+                _buildDetails(context, product)
               ],
             );
           },

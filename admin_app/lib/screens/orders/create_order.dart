@@ -6,15 +6,27 @@ import '../../cubit/order/order_cubit.dart';
 import '../../cubit/order/order_state.dart';
 import '../../data/order/pick_result_model.dart';
 import '../../data/product/product_model.dart';
+import '../../utils/arabic_digits.dart';
+import '../../utils/jordan_phone.dart';
 import '../../widgets/labeled.dart';
+import 'widgets/qr_scanner_screen.dart';
 
-class CreateOrderScreen extends StatelessWidget {
+class CreateOrderScreen extends StatefulWidget {
   const CreateOrderScreen({super.key});
+
+  @override
+  State<CreateOrderScreen> createState() => _CreateOrderScreenState();
+}
+
+class _CreateOrderScreenState extends State<CreateOrderScreen> {
+  final _formKey = GlobalKey<FormState>();
 
   Future<void> _openItemPicker(BuildContext context) async {
     final inventoryCubit = context.read<InventoryCubit>();
     final orderCubit = context.read<OrderCubit>();
-    await inventoryCubit.fetchProducts();
+    // Always pull live stock — a stale cache here makes a second order against
+    // the same variant fail confusingly at the (correct) atomic transaction.
+    await inventoryCubit.fetchProducts(refresh: true);
 
     if (!context.mounted) return;
     final pick = await showDialog<_PickedItem>(
@@ -23,6 +35,31 @@ class CreateOrderScreen extends StatelessWidget {
     );
     if (pick != null) {
       orderCubit.addItem(pick.pickResult, pick.quantity);
+    }
+  }
+
+  Future<void> _pickDeliveryDate(OrderCubit cubit) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 90)),
+      initialDate: now,
+    );
+    if (picked != null) {
+      setState(() {
+        cubit.deliveryDateCtrl.text =
+            picked.toIso8601String().split('T').first; // yyyy-MM-dd
+      });
+    }
+  }
+
+  Future<void> _scanQrCode(OrderCubit cubit) async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+    );
+    if (code != null && code.isNotEmpty) {
+      setState(() => cubit.qrCodeCtrl.text = code.split('=').last);
     }
   }
 
@@ -43,103 +80,156 @@ class CreateOrderScreen extends StatelessWidget {
           }
         },
         builder: (context, state) {
-        final isSaving = state is OrderLoading;
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Labeled(
-              label: 'اسم الزبون',
-              child: TextFormField(
-                controller: cubit.customerNameCtrl,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Labeled(
-              label: 'رقم الهاتف',
-              child: TextFormField(
-                controller: cubit.customerPhoneCtrl,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Labeled(
-              label: 'المدينة',
-              child: TextFormField(
-                controller: cubit.addressCtrl,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Labeled(
-              label: 'المنطقة',
-              child: TextFormField(
-                controller: cubit.areaCtrl,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Labeled(
-              label: 'تفاصيل العنوان',
-              child: TextFormField(
-                controller: cubit.streetCtrl,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Labeled(
-              label: 'الوجهة (اختياري)',
-              child: TextFormField(
-                controller: cubit.destinationCtrl,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Labeled(
-              label: 'تاريخ التسليم (اختياري)',
-              child: TextFormField(
-                controller: cubit.deliveryDateCtrl,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
+          final isSaving = state is OrderLoading;
+          return Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                Text('القطع', style: Theme.of(context).textTheme.titleMedium),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () => _openItemPicker(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('إضافة قطعة'),
+                Labeled(
+                  label: 'اسم الزبون',
+                  child: TextFormField(
+                    controller: cubit.customerNameCtrl,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Labeled(
+                  label: 'رقم الهاتف',
+                  child: TextFormField(
+                    controller: cubit.customerPhoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    textDirection: TextDirection.ltr,
+                    inputFormatters: [
+                      ArabicDigitsInputFormatter(),
+                      JordanPhoneInputFormatter(),
+                    ],
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    decoration: const InputDecoration(
+                      hintText: '7XXXXXXXX',
+                      hintTextDirection: TextDirection.ltr,
+                      border: OutlineInputBorder(),
+                      prefixIcon: Padding(
+                        padding: EdgeInsetsDirectional.only(start: 12, end: 8),
+                        child: Align(
+                          alignment: Alignment.center,
+                          widthFactor: 1,
+                          child: Text('🇯🇴 $jordanDialCode', style: TextStyle(fontSize: 15)),
+                        ),
+                      ),
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().length != jordanLocalNumberLength)
+                            ? 'أدخل رقمًا من 9 أرقام'
+                            : null,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Labeled(
+                  label: 'المدينة',
+                  child: TextFormField(
+                    controller: cubit.addressCtrl,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Labeled(
+                  label: 'المنطقة',
+                  child: TextFormField(
+                    controller: cubit.areaCtrl,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Labeled(
+                  label: 'تفاصيل العنوان',
+                  child: TextFormField(
+                    controller: cubit.streetCtrl,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Labeled(
+                  label: 'الوجهة (اختياري)',
+                  child: TextFormField(
+                    controller: cubit.destinationCtrl,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Labeled(
+                  label: 'تاريخ التسليم (اختياري)',
+                  child: TextFormField(
+                    controller: cubit.deliveryDateCtrl,
+                    readOnly: true,
+                    onTap: () => _pickDeliveryDate(cubit),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'اختر التاريخ',
+                      suffixIcon: Icon(Icons.calendar_today_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Labeled(
+                  label: 'الباركود (اختياري)',
+                  child: TextFormField(
+                    controller: cubit.qrCodeCtrl,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: 'اكتب الرمز أو امسحه بالكاميرا',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.qr_code_scanner),
+                        tooltip: 'مسح بالكاميرا',
+                        onPressed: () => _scanQrCode(cubit),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Text('القطع', style: Theme.of(context).textTheme.titleMedium),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => _openItemPicker(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('إضافة قطعة'),
+                    ),
+                  ],
+                ),
+                ...List.generate(cubit.selectedItems.length, (index) {
+                  final item = cubit.selectedItems[index];
+                  return ListTile(
+                    dense: true,
+                    title: Text('${item.productName ?? item.productId} — ${item.color} — مقاس ${item.size}'),
+                    subtitle: Text('الكمية: ${item.quantity}'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => cubit.removeItem(index),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: isSaving
+                      ? null
+                      : () {
+                          if (_formKey.currentState!.validate()) {
+                            cubit.submitOrder();
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('حفظ الطلب'),
                 ),
               ],
             ),
-            ...List.generate(cubit.selectedItems.length, (index) {
-              final item = cubit.selectedItems[index];
-              return ListTile(
-                dense: true,
-                title: Text('${item.productName ?? item.productId} — ${item.color} — مقاس ${item.size}'),
-                subtitle: Text('الكمية: ${item.quantity}'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => cubit.removeItem(index),
-                ),
-              );
-            }),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: isSaving ? null : cubit.submitOrder,
-              child: isSaving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text('حفظ الطلب'),
-            ),
-          ],
-        );
+          );
         },
       ),
     );
@@ -225,6 +315,7 @@ class _ItemPickerDialogState extends State<_ItemPickerDialog> {
             TextFormField(
               controller: _qtyCtrl,
               keyboardType: TextInputType.number,
+              inputFormatters: [ArabicDigitsInputFormatter()],
               decoration: const InputDecoration(labelText: 'الكمية'),
             ),
           ],
@@ -236,7 +327,8 @@ class _ItemPickerDialogState extends State<_ItemPickerDialog> {
           onPressed: _selectedProduct == null || _selectedColor == null || _selectedSize == null
               ? null
               : () {
-                  final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 1;
+                  final qty =
+                      int.tryParse(normalizeDigits(_qtyCtrl.text.trim())) ?? 1;
                   Navigator.pop(
                     context,
                     _PickedItem(

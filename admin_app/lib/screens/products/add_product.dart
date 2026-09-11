@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../cubit/inventory/inventory_cubit.dart';
 import '../../cubit/inventory/inventory_state.dart';
 import '../../data/product/product_model.dart';
+import '../../utils/arabic_digits.dart';
 import '../../widgets/labeled.dart';
 
 /// Sentinel item value for the "+ new category" option in the category
@@ -124,6 +125,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       child: TextFormField(
                         controller: cubit.priceCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [ArabicDigitsInputFormatter()],
                         decoration: const InputDecoration(border: OutlineInputBorder()),
                         onChanged: (_) => setState(() {}),
                       ),
@@ -136,6 +138,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       child: TextFormField(
                         controller: cubit.salePriceCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [ArabicDigitsInputFormatter()],
                         decoration: const InputDecoration(border: OutlineInputBorder()),
                         onChanged: (_) => setState(() {}),
                       ),
@@ -166,6 +169,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 child: TextFormField(
                   controller: cubit.lowStockCtrl,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [ArabicDigitsInputFormatter()],
                   decoration: const InputDecoration(border: OutlineInputBorder()),
                 ),
               ),
@@ -312,6 +316,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               child: TextFormField(
                                 controller: row.qtyCtrls[i].qtyCtrl,
                                 keyboardType: TextInputType.number,
+                                inputFormatters: [ArabicDigitsInputFormatter()],
                                 decoration: InputDecoration(
                                   labelText: sizeLabel.isEmpty ? 'مقاس ${i + 1}' : 'مقاس $sizeLabel',
                                   border: const OutlineInputBorder(),

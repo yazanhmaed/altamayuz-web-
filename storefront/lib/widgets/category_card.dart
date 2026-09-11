@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../screens/category_products_page.dart';
+import 'package:go_router/go_router.dart';
 import 'ui_helpers.dart';
 
 /// Image-cover category tile: the category's first product photo under a dark
@@ -68,12 +68,8 @@ class CategoryCard extends StatelessWidget {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CategoryProductsPage(category: name),
-                  ),
-                ),
+                onTap: () =>
+                    context.push('/category/${Uri.encodeComponent(name)}'),
               ),
             ),
           ),

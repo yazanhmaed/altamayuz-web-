@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../data/product/product_model.dart';
+import '../../utils/arabic_digits.dart';
 import 'inventory_state.dart';
 
 /// One quantity field, positioned at some index that corresponds to the
@@ -306,7 +307,8 @@ class InventoryCubit extends Cubit<InventoryState> {
         final size = globalSizeCtrls[i].text.trim();
         if (size.isEmpty) continue;
         if (i >= row.qtyCtrls.length) continue;
-        sizeMap[size] = int.tryParse(row.qtyCtrls[i].qtyCtrl.text.trim()) ?? 0;
+        sizeMap[size] =
+            int.tryParse(normalizeDigits(row.qtyCtrls[i].qtyCtrl.text.trim())) ?? 0;
       }
       stock[color] = sizeMap;
     }
@@ -316,7 +318,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     return ProductModel(
       id: id,
       name: nameCtrl.text.trim(),
-      price: double.tryParse(priceCtrl.text.trim()) ?? 0,
+      price: double.tryParse(normalizeDigits(priceCtrl.text.trim())) ?? 0,
       salePrice: salePrice,
       colors: colors,
       imageUrls: imageUrls,
@@ -324,7 +326,7 @@ class InventoryCubit extends Cubit<InventoryState> {
       isActive: isActive,
       isFeatured: isFeatured,
       category: trimmedCategory.isEmpty ? 'عام' : trimmedCategory,
-      lowStockThreshold: int.tryParse(lowStockCtrl.text.trim()) ?? 1,
+      lowStockThreshold: int.tryParse(normalizeDigits(lowStockCtrl.text.trim())) ?? 1,
       createdAt: editingProduct?.createdAt ?? now,
       updatedAt: now,
     );
@@ -336,8 +338,8 @@ class InventoryCubit extends Cubit<InventoryState> {
       return;
     }
 
-    final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
-    final saleText = salePriceCtrl.text.trim();
+    final price = double.tryParse(normalizeDigits(priceCtrl.text.trim())) ?? 0;
+    final saleText = normalizeDigits(salePriceCtrl.text.trim());
     double? salePrice;
     if (saleText.isNotEmpty) {
       final parsed = double.tryParse(saleText);
@@ -457,7 +459,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     for (final r in restockRows) {
       final color = r.colorCtrl.text.trim();
       final size = r.sizeCtrl.text.trim();
-      final qty = int.tryParse(r.qtyCtrl.text.trim()) ?? 0;
+      final qty = int.tryParse(normalizeDigits(r.qtyCtrl.text.trim())) ?? 0;
       if (color.isEmpty || size.isEmpty || qty <= 0) continue;
       additions.putIfAbsent(color, () => {});
       additions[color]![size] = (additions[color]![size] ?? 0) + qty;
@@ -505,13 +507,13 @@ class InventoryCubit extends Cubit<InventoryState> {
         final thresholdText = row.length > 4 ? _cellText(row[4]) : '';
         if (name.isEmpty || color.isEmpty || size.isEmpty) continue;
 
-        final qty = int.tryParse(qtyText) ?? 0;
+        final qty = int.tryParse(normalizeDigits(qtyText)) ?? 0;
         final entry = parsed.putIfAbsent(name, () => _ImportedProduct(name));
         entry.colors.add(color);
         entry.stock.putIfAbsent(color, () => {});
         entry.stock[color]![size] = qty;
 
-        final threshold = int.tryParse(thresholdText);
+        final threshold = int.tryParse(normalizeDigits(thresholdText));
         if (threshold != null) entry.threshold = threshold;
       }
 

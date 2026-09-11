@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../cart/cart_controller.dart';
 import '../data/cart_discount_repository.dart';
 import '../models/cart_discount.dart';
+import '../utils/arabic_digits.dart';
 import '../utils/jordan_phone.dart';
 import '../utils/responsive.dart';
 import 'order_success_page.dart';
@@ -314,7 +315,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
             controller: _phoneCtrl,
             keyboardType: TextInputType.phone,
             textDirection: TextDirection.ltr,
-            inputFormatters: [JordanPhoneInputFormatter()],
+            inputFormatters: [
+              ArabicDigitsInputFormatter(),
+              JordanPhoneInputFormatter(),
+            ],
             autovalidateMode: AutovalidateMode.onUserInteraction,
             decoration: InputDecoration(
               labelText: 'رقم الهاتف',
@@ -423,7 +427,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'الدفع عند استلام الطلب',
+                        'الدفع عند استلام الطلب (نقدا ، كليك)',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),

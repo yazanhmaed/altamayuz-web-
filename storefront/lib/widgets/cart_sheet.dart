@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../cart/cart_controller.dart';
+import '../data/cart_discount_repository.dart';
+import '../models/cart_discount.dart';
 import '../theme/app_theme.dart';
 
-import '../screens/checkout_page.dart';
 import 'ui_helpers.dart';
 
 class CartSheet extends StatelessWidget {
@@ -66,7 +68,7 @@ class CartSheet extends StatelessWidget {
   }
 }
 
-class CartContent extends StatelessWidget {
+class CartContent extends StatefulWidget {
   final ScrollController? scrollController;
   final bool isDesktop;
 
@@ -77,13 +79,40 @@ class CartContent extends StatelessWidget {
   });
 
   @override
+  State<CartContent> createState() => _CartContentState();
+}
+
+class _CartContentState extends State<CartContent> {
+  /// Cart-wide quantity-discount tiers, read once on load. Empty until the
+  /// one-time Firestore read completes, and empty forever if none are
+  /// configured — either way `_discount` then resolves to "no discount".
+  List<CartDiscountTier> _tiers = const [];
+
+  CartDiscountResult get _discount => computeCartDiscount(
+        tiers: _tiers,
+        totalQuantity: cartController.itemCount,
+        subtotal: cartController.total,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    loadCartDiscountTiers().then((tiers) {
+      if (mounted) setState(() => _tiers = tiers);
+    }).catchError((_) {
+      // Network hiccup reading config — proceed with no cart discount rather
+      // than blocking the cart sheet.
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: isDesktop
+        borderRadius: widget.isDesktop
             ? const BorderRadius.horizontal(right: Radius.circular(20))
             : const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: const [
@@ -168,7 +197,7 @@ class CartContent extends StatelessWidget {
               else
                 Expanded(
                   child: ListView.separated(
-                    controller: scrollController,
+                    controller: widget.scrollController,
                     padding: const EdgeInsets.all(16),
                     itemCount: cart.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -299,6 +328,29 @@ class CartContent extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
+                      // Cart-wide quantity discount — shown only when one
+                      // actually applies (no empty row / gap otherwise).
+                      if (_discount.amount > 0) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'خصم الكمية',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              '-${_discount.amount.toStringAsFixed(2)} د.أ',
+                              style: const TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -309,7 +361,7 @@ class CartContent extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${cartController.total.toStringAsFixed(2)} د.أ',
+                            '${(cartController.total - _discount.amount).toStringAsFixed(2)} د.أ',
                             style: theme.textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: theme.colorScheme.primary,
@@ -332,12 +384,7 @@ class CartContent extends StatelessWidget {
                           ),
                           onPressed: () {
                             Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const CheckoutPage(),
-                              ),
-                            );
+                            context.push('/checkout');
                           },
                           child: const Text(
                             'متابعة الشراء',

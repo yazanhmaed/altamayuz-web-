@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../utils/arabic_digits.dart';
+
 /// Owner-facing editor for `settings/cartDiscountTiers` — the cart-wide
 /// quantity-discount tiers applied at storefront checkout.
 ///
@@ -76,14 +78,14 @@ class _CartDiscountSettingsScreenState
     final mins = <int>{};
     for (var i = 0; i < _tiers.length; i++) {
       final t = _tiers[i];
-      final min = int.tryParse(t.minCtrl.text.trim());
+      final min = int.tryParse(normalizeDigits(t.minCtrl.text.trim()));
       if (min == null || min < 2) {
         return 'الحد الأدنى للكمية في الشريحة ${i + 1} يجب أن يكون رقمًا صحيحًا ≥ 2.';
       }
       if (!mins.add(min)) {
         return 'لا يمكن تكرار نفس الحد الأدنى للكمية ($min) في أكثر من شريحة.';
       }
-      final value = double.tryParse(t.valueCtrl.text.trim());
+      final value = double.tryParse(normalizeDigits(t.valueCtrl.text.trim()));
       if (value == null) {
         return 'قيمة الخصم في الشريحة ${i + 1} غير صالحة.';
       }
@@ -107,9 +109,9 @@ class _CartDiscountSettingsScreenState
 
     final tiers = _tiers
         .map((t) => {
-              'minQuantity': int.parse(t.minCtrl.text.trim()),
+              'minQuantity': int.parse(normalizeDigits(t.minCtrl.text.trim())),
               'type': t.type,
-              'value': double.parse(t.valueCtrl.text.trim()),
+              'value': double.parse(normalizeDigits(t.valueCtrl.text.trim())),
             })
         .toList()
       ..sort((a, b) =>
@@ -256,7 +258,10 @@ class _TierRow extends StatelessWidget {
             TextField(
               controller: draft.minCtrl,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [
+                ArabicDigitsInputFormatter(),
+                FilteringTextInputFormatter.digitsOnly,
+              ],
               decoration: const InputDecoration(
                 labelText: 'الحد الأدنى لعدد القطع (≥ 2)',
               ),
@@ -283,6 +288,7 @@ class _TierRow extends StatelessWidget {
                     controller: draft.valueCtrl,
                     keyboardType: const TextInputType.numberWithOptions(
                         decimal: true),
+                    inputFormatters: [ArabicDigitsInputFormatter()],
                     decoration: InputDecoration(
                       labelText: draft.type == 'percentage'
                           ? 'النسبة (1–100)'

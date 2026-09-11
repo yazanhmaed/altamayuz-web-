@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../cart/cart_controller.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
@@ -11,8 +12,6 @@ import '../widgets/store_footer.dart';
 import '../widgets/ui_helpers.dart';
 import '../widgets/cart_sheet.dart';
 import '../widgets/whatsapp_fab.dart';
-import 'category_products_page.dart';
-import 'product_detail_page.dart';
 
 class StoreHomePage extends StatefulWidget {
   const StoreHomePage({super.key});
@@ -301,15 +300,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                                       Theme.of(context).textTheme.titleMedium),
                               const Spacer(),
                               TextButton(
-                                onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const CategoryProductsPage(
-                                      onlyOnSale: true,
-                                      titleOverride: 'عروض خاصة',
-                                    ),
-                                  ),
-                                ),
+                                onPressed: () => context.push('/offers'),
                                 child: const Text('عرض الكل'),
                               ),
                             ],
@@ -586,10 +577,7 @@ class _HeroBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) => ProductDetailPage(product: product))),
+      onTap: () => context.push('/product/${product.id}', extra: product),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         height: 320,

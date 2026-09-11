@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'firebase_options.dart';
-import 'screens/store_home_page.dart';
+import 'router.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -34,7 +34,7 @@ class StorefrontApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'التميز للجلود الطبيعية المميزة',
       debugShowCheckedModeBanner: false,
       scrollBehavior: _AppScrollBehavior(),
@@ -46,7 +46,7 @@ class StorefrontApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('ar')],
-      home: const StoreHomePage(),
+      routerConfig: appRouter,
     );
   }
 }

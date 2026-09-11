@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../models/public_product_model.dart';
-import '../screens/product_detail_page.dart';
 import '../theme/app_theme.dart';
 import 'ui_helpers.dart';
 
@@ -99,11 +99,9 @@ class ProductCard extends StatelessWidget {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ProductDetailPage(product: product),
-                  ),
+                onTap: () => context.push(
+                  '/product/${product.id}',
+                  extra: product,
                 ),
               ),
             ),

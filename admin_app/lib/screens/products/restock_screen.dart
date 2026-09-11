@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/inventory/inventory_cubit.dart';
 import '../../cubit/inventory/inventory_state.dart';
 import '../../data/product/product_model.dart';
+import '../../utils/arabic_digits.dart';
 
 class RestockScreen extends StatefulWidget {
   final ProductModel product;
@@ -64,6 +65,7 @@ class _RestockScreenState extends State<RestockScreen> {
                       child: TextFormField(
                         controller: row.qtyCtrl,
                         keyboardType: TextInputType.number,
+                        inputFormatters: [ArabicDigitsInputFormatter()],
                         decoration: const InputDecoration(labelText: 'الكمية المضافة', border: OutlineInputBorder()),
                       ),
                     ),

@@ -1,10 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../cubit/order/order_cubit.dart';
 import '../../../data/order/order_model.dart';
 
 String _money(double v) => '${v.toStringAsFixed(2)} د.أ';
+
+/// Builds a `wa.me` deep link that opens a chat with the customer with a
+/// pre-filled order-confirmation message — not sent automatically, the owner
+/// still has to press send in WhatsApp. `customerPhone` is stored E.164
+/// (`+962...`); wa.me needs the digits without the leading `+`.
+String _buildWhatsAppConfirmationUrl(OrderModel order) {
+  final digitsOnly = order.customerPhone.replaceAll(RegExp(r'[^0-9]'), '');
+
+  final buffer = StringBuffer()
+    ..writeln('مرحباً ${order.customerName} 👋')
+    ..writeln('نود تأكيد طلبك:')
+    ..writeln();
+  for (final item in order.items) {
+    buffer.writeln(
+      '- ${item.productName ?? item.productId} — ${item.color} — مقاس ${item.size} × ${item.quantity}',
+    );
+  }
+  buffer
+    ..writeln()
+    ..writeln('📍 العنوان: ${order.address} - ${order.area}');
+  if (order.street.isNotEmpty) buffer.writeln(order.street);
+  if (order.total != null) {
+    buffer.writeln('💰 الإجمالي: ${order.total!.toStringAsFixed(2)} د.أ');
+  }
+  buffer.writeln();
+  buffer.write('الرجاء تأكيد الطلب بالرد على هذه الرسالة 🙏');
+
+  final encodedMessage = Uri.encodeComponent(buffer.toString());
+  return 'https://wa.me/$digitsOnly?text=$encodedMessage';
+}
 
 /// Order money summary. Nothing for orders with no stored total (older manual
 /// orders); a single total line normally; a subtotal / discount / net-total
@@ -155,6 +186,20 @@ class OrderCard extends StatelessWidget {
                   onPressed: () => cubit.updateOrderQrCode(order: order, context: context),
                   icon: const Icon(Icons.qr_code_scanner, size: 16),
                   label: const Text('مسح QR'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse(_buildWhatsAppConfirmationUrl(order));
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    } else if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تعذر فتح واتساب.')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.chat_outlined, size: 16, color: Color(0xFF25D366)),
+                  label: const Text('تأكيد عبر واتساب'),
                 ),
               ],
             ),

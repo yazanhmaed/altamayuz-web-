@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/order/order_model.dart';
 import '../../data/order/pick_result_model.dart';
 import '../../screens/orders/widgets/qr_scanner_screen.dart';
+import '../../utils/jordan_phone.dart';
 import 'order_state.dart';
 
 class OrderCubit extends Cubit<OrderState> {
@@ -22,6 +23,7 @@ class OrderCubit extends Cubit<OrderState> {
   final streetCtrl = TextEditingController();
   final destinationCtrl = TextEditingController();
   final deliveryDateCtrl = TextEditingController();
+  final qrCodeCtrl = TextEditingController();
   final List<OrderItem> selectedItems = [];
   OrderModel? editingOrder;
 
@@ -77,6 +79,7 @@ class OrderCubit extends Cubit<OrderState> {
     streetCtrl.clear();
     destinationCtrl.clear();
     deliveryDateCtrl.clear();
+    qrCodeCtrl.clear();
     selectedItems.clear();
     emit(OrderFormChanged());
   }
@@ -84,12 +87,13 @@ class OrderCubit extends Cubit<OrderState> {
   void loadOrderForEditing(OrderModel orderModel) {
     editingOrder = orderModel;
     customerNameCtrl.text = orderModel.customerName;
-    customerPhoneCtrl.text = orderModel.customerPhone;
+    customerPhoneCtrl.text = jordanPhoneToLocal(orderModel.customerPhone);
     addressCtrl.text = orderModel.address;
     areaCtrl.text = orderModel.area;
     streetCtrl.text = orderModel.street;
     destinationCtrl.text = orderModel.destination;
     deliveryDateCtrl.text = orderModel.deliveryDate;
+    qrCodeCtrl.text = orderModel.qrCode.isNotEmpty ? orderModel.qrCode.first : '';
     selectedItems
       ..clear()
       ..addAll(orderModel.items);
@@ -100,13 +104,19 @@ class OrderCubit extends Cubit<OrderState> {
     return OrderModel(
       id: id,
       customerName: customerNameCtrl.text.trim(),
-      customerPhone: customerPhoneCtrl.text.trim(),
+      // Stored in the same E164 form the storefront uses (jordanPhoneToE164),
+      // so admin- and storefront-created orders match. Empty stays empty.
+      customerPhone: customerPhoneCtrl.text.trim().isEmpty
+          ? ''
+          : jordanPhoneToE164(customerPhoneCtrl.text.trim()),
       destination: destinationCtrl.text.trim(),
       address: addressCtrl.text.trim(),
       area: areaCtrl.text.trim(),
       street: streetCtrl.text.trim(),
       items: List.of(selectedItems),
-      qrCode: editingOrder?.qrCode ?? [],
+      qrCode: qrCodeCtrl.text.trim().isNotEmpty
+          ? [qrCodeCtrl.text.trim()]
+          : (editingOrder?.qrCode ?? []),
       createdAt: editingOrder?.createdAt ?? DateTime.now(),
       status: editingOrder?.status ?? OrderStatus.pending,
       deliveryDate: deliveryDateCtrl.text.trim(),
@@ -518,6 +528,7 @@ class OrderCubit extends Cubit<OrderState> {
     streetCtrl.dispose();
     destinationCtrl.dispose();
     deliveryDateCtrl.dispose();
+    qrCodeCtrl.dispose();
     return super.close();
   }
 }

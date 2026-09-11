@@ -4,6 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'cubit/inventory/inventory_cubit.dart';
 import 'cubit/order/order_cubit.dart';
@@ -48,7 +49,18 @@ class AdminApp extends StatelessWidget {
       child: MaterialApp(
         title: 'إدارة المتجر',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF1F3A3D)),
+        locale: const Locale('ar'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('ar')],
+        theme: ThemeData(
+          useMaterial3: true,
+          colorSchemeSeed: const Color(0xFF1F3A3D),
+          fontFamily: 'Tajawal',
+        ),
         home: const HomeScreen(),
       ),
     );
