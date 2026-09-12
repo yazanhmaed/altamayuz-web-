@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../config/store_info.dart';
 import '../utils/responsive.dart';
+import '../widgets/ui_helpers.dart';
 
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
@@ -12,6 +13,7 @@ class AboutPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const GoBackButton(),
         title: const Text('من نحن'),
         centerTitle: true,
       ),

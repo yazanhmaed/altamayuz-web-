@@ -223,7 +223,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               ? null
               : () {
                   HapticFeedback.selectionClick();
-                  context.push(
+                  context.go(
                     '/checkout',
                     extra: CartLine(
                       product: product,
@@ -255,12 +255,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final product = _product;
     if (product == null) {
       return Scaffold(
-        appBar: AppBar(),
+        appBar: AppBar(leading: const GoBackButton()),
         body: const Center(child: Text('المنتج غير موجود')),
       );
     }
     return Scaffold(
-      appBar: AppBar(title: Text(product.name)),
+      appBar: AppBar(
+        leading: const GoBackButton(),
+        title: Text(product.name),
+      ),
       body: ResponsiveCenter(
         child: LayoutBuilder(
           builder: (context, constraints) {

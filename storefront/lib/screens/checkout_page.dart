@@ -8,6 +8,7 @@ import '../models/cart_discount.dart';
 import '../utils/arabic_digits.dart';
 import '../utils/jordan_phone.dart';
 import '../utils/responsive.dart';
+import '../widgets/ui_helpers.dart';
 import 'order_success_page.dart';
 
 class CheckoutPage extends StatefulWidget {
@@ -496,6 +497,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const GoBackButton(),
         title: const Text('إتمام الطلب'),
         centerTitle: true,
       ),

@@ -99,7 +99,7 @@ class ProductCard extends StatelessWidget {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () => context.push(
+                onTap: () => context.go(
                   '/product/${product.id}',
                   extra: product,
                 ),

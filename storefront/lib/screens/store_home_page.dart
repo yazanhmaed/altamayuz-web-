@@ -300,7 +300,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                                       Theme.of(context).textTheme.titleMedium),
                               const Spacer(),
                               TextButton(
-                                onPressed: () => context.push('/offers'),
+                                onPressed: () => context.go('/offers'),
                                 child: const Text('عرض الكل'),
                               ),
                             ],
@@ -577,7 +577,7 @@ class _HeroBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.push('/product/${product.id}', extra: product),
+      onTap: () => context.go('/product/${product.id}', extra: product),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         height: 320,

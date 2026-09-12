@@ -42,25 +42,25 @@ class StoreFooter extends StatelessWidget {
                     // Opens the full category list; each row drills into the
                     // matching CategoryProductsPage. Same category set the home
                     // chip row shows.
-                    onTap: () => context.push('/categories'),
+                    onTap: () => context.go('/categories'),
                   ),
                   _FooterLink(
                     label: 'الخصومات',
                     // Discounts have landed (PublicProductModel.salePrice), so
                     // this goes straight to the on-sale grid.
-                    onTap: () => context.push('/offers'),
+                    onTap: () => context.go('/offers'),
                   ),
                   _FooterLink(
                     label: 'من نحن',
-                    onTap: () => context.push('/about'),
+                    onTap: () => context.go('/about'),
                   ),
                   _FooterLink(
                     label: 'تواصل معنا',
-                    onTap: () => context.push('/contact'),
+                    onTap: () => context.go('/contact'),
                   ),
                   _FooterLink(
                     label: 'سياسة الشحن والتوصيل',
-                    onTap: () => context.push('/shipping-policy'),
+                    onTap: () => context.go('/shipping-policy'),
                   ),
                 ],
               ),

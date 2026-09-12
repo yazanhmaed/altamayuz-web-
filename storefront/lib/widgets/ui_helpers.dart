@@ -1,6 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
+
+/// `AppBar.leading` back button for every non-home screen. Navigation now
+/// goes through `go_router`'s `go()` everywhere (a workaround for a
+/// `push()` URL-not-updating bug), which replaces the current location
+/// instead of pushing one — so `Navigator.canPop` is normally false and
+/// `AppBar`'s automatic back arrow no longer appears on its own. This pops
+/// when there's genuinely something to pop back to, and falls back to home
+/// otherwise (a direct/shared link, or any screen `go()` reached).
+class GoBackButton extends StatelessWidget {
+  const GoBackButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () {
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/');
+        }
+      },
+    );
+  }
+}
 
 class ProductCardSkeleton extends StatefulWidget {
   const ProductCardSkeleton({super.key});

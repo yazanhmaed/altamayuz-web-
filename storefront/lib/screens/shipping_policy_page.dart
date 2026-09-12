@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../config/store_info.dart';
 import '../utils/responsive.dart';
+import '../widgets/ui_helpers.dart';
 
 /// Delivery + exchange policy, linked from the home footer. Content comes
 /// straight from [deliveryPolicyText] (the single source of truth); this page
@@ -22,6 +23,7 @@ class ShippingPolicyPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const GoBackButton(),
         title: const Text('سياسة الشحن والتوصيل'),
         centerTitle: true,
       ),

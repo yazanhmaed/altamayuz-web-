@@ -384,7 +384,7 @@ class _CartContentState extends State<CartContent> {
                           ),
                           onPressed: () {
                             Navigator.pop(context);
-                            context.push('/checkout');
+                            context.go('/checkout');
                           },
                           child: const Text(
                             'متابعة الشراء',

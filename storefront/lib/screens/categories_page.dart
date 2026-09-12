@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/public_product_model.dart';
 import '../utils/responsive.dart';
 import '../widgets/category_card.dart';
+import '../widgets/ui_helpers.dart';
 
 /// Grid of category cards, each showing the first product's image as its cover
 /// and opening the matching category page. Reached from the home footer; the
@@ -13,7 +14,7 @@ class CategoriesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('الأصناف')),
+      appBar: AppBar(leading: const GoBackButton(), title: const Text('الأصناف')),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('products')

@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../utils/url_launch.dart';
 import '../widgets/social_icons_row.dart';
+import '../widgets/ui_helpers.dart';
 
 class ContactPage extends StatelessWidget {
   const ContactPage({super.key});
@@ -17,6 +18,7 @@ class ContactPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const GoBackButton(),
         title: const Text('تواصل معنا'),
         centerTitle: true,
       ),

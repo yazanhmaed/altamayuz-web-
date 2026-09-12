@@ -69,7 +69,7 @@ class CategoryCard extends StatelessWidget {
               color: Colors.transparent,
               child: InkWell(
                 onTap: () =>
-                    context.push('/category/${Uri.encodeComponent(name)}'),
+                    context.go('/category/${Uri.encodeComponent(name)}'),
               ),
             ),
           ),
