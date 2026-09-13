@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'cubit/dashboard/dashboard_cubit.dart';
 import 'cubit/inventory/inventory_cubit.dart';
 import 'cubit/order/order_cubit.dart';
 import 'firebase_options.dart';
@@ -49,6 +50,7 @@ class AdminApp extends StatelessWidget {
       providers: [
         BlocProvider(create: (_) => InventoryCubit()),
         BlocProvider(create: (_) => OrderCubit()),
+        BlocProvider(create: (_) => DashboardCubit()),
       ],
       child: MaterialApp(
         title: 'إدارة المتجر',

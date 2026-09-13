@@ -7,6 +7,8 @@ import '../../screens/orders/widgets/qr_scanner_screen.dart';
 import '../../utils/jordan_phone.dart';
 import 'order_state.dart';
 
+enum OrderFilter { active, all, pending, shipped, completed, returned }
+
 class OrderCubit extends Cubit<OrderState> {
   OrderCubit() : super(OrderInitial());
 
@@ -14,6 +16,7 @@ class OrderCubit extends Cubit<OrderState> {
 
   List<OrderModel> orders = [];
   bool _hasFetched = false;
+  OrderFilter currentFilter = OrderFilter.active;
 
   // ---- create/edit order form state ----
   final customerNameCtrl = TextEditingController();
@@ -28,15 +31,37 @@ class OrderCubit extends Cubit<OrderState> {
   final List<OrderItem> selectedItems = [];
   OrderModel? editingOrder;
 
-  Future<void> fetchOrders({bool refresh = false}) async {
-    if (_hasFetched && !refresh) {
+  /// Fetches orders server-side filtered by [filter] (defaults to whatever
+  /// [currentFilter] currently is). Every filter but [OrderFilter.all] is a
+  /// naturally small/bounded set (active orders, or a single status) that
+  /// the owner keeps moving orders out of — no `.limit()` needed there.
+  /// `OrderFilter.all` is the one genuinely unbounded case, so it's the only
+  /// one capped, at the 100 most recent orders across every status.
+  Future<void> fetchOrders({OrderFilter? filter, bool refresh = false}) async {
+    final targetFilter = filter ?? currentFilter;
+    if (currentFilter == targetFilter && _hasFetched && !refresh) {
       emit(OrderLoaded(orders));
       return;
     }
+    currentFilter = targetFilter;
     emit(OrderLoading());
     try {
-      final snap = await _db.collection('orders').orderBy('createdAt', descending: true).get();
-      orders = snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+      Query query = _db.collection('orders').orderBy('createdAt', descending: true);
+      switch (targetFilter) {
+        case OrderFilter.active:
+          query = query.where('status', whereIn: ['pending', 'shipped']);
+        case OrderFilter.all:
+          query = query.limit(100);
+        case OrderFilter.pending:
+        case OrderFilter.shipped:
+        case OrderFilter.completed:
+        case OrderFilter.returned:
+          query = query.where('status', isEqualTo: targetFilter.name);
+      }
+      final snap = await query.get();
+      orders = snap.docs
+          .map((d) => OrderModel.fromMap(d.data() as Map<String, dynamic>))
+          .toList();
       _hasFetched = true;
       emit(OrderLoaded(orders));
     } catch (e) {

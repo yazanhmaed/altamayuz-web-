@@ -194,6 +194,23 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         ),
         const SizedBox(height: 16),
         const Text('المقاس'),
+        Builder(builder: (context) {
+          final selectedQty = _selectedSize == null
+              ? null
+              : _selectedVariant.sizes[_selectedSize];
+          if (selectedQty != 1) return const SizedBox.shrink();
+          return const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'آخر قطعة!',
+              style: TextStyle(
+                color: AppColors.danger,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          );
+        }),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,

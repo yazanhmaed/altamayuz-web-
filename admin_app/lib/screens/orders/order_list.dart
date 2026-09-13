@@ -20,6 +20,15 @@ class _OrderListScreenState extends State<OrderListScreen> {
     context.read<OrderCubit>().fetchOrders();
   }
 
+  static const _filterLabels = {
+    OrderFilter.active: 'نشط',
+    OrderFilter.all: 'الكل',
+    OrderFilter.pending: 'معلّق',
+    OrderFilter.shipped: 'مشحون',
+    OrderFilter.completed: 'مكتمل',
+    OrderFilter.returned: 'مرتجع',
+  };
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -31,20 +40,44 @@ class _OrderListScreenState extends State<OrderListScreen> {
           }
         },
         builder: (context, state) {
-          if (state is OrderLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final orders = context.read<OrderCubit>().orders;
-          if (orders.isEmpty) {
-            return const Center(child: Text('لا توجد طلبات بعد'));
-          }
-          return RefreshIndicator(
-            onRefresh: () => context.read<OrderCubit>().fetchOrders(refresh: true),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: orders.length,
-              itemBuilder: (context, index) => OrderCard(order: orders[index]),
-            ),
+          final cubit = context.read<OrderCubit>();
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final filter in OrderFilter.values)
+                      ChoiceChip(
+                        label: Text(_filterLabels[filter]!),
+                        selected: cubit.currentFilter == filter,
+                        onSelected: (_) => cubit.fetchOrders(filter: filter),
+                      ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Builder(builder: (context) {
+                  if (state is OrderLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final orders = cubit.orders;
+                  if (orders.isEmpty) {
+                    return const Center(child: Text('لا توجد طلبات بعد'));
+                  }
+                  return RefreshIndicator(
+                    onRefresh: () => cubit.fetchOrders(refresh: true),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: orders.length,
+                      itemBuilder: (context, index) => OrderCard(order: orders[index]),
+                    ),
+                  );
+                }),
+              ),
+            ],
           );
         },
       ),
