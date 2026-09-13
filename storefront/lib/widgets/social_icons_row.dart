@@ -9,9 +9,8 @@ import '../utils/url_launch.dart';
 /// contact page. Each icon opens its URL externally via [openExternalUrl],
 /// which never throws.
 ///
-/// Instagram uses a neutral Material stand-in ([Icons.camera_alt_outlined]) —
-/// there's no brand-icon package in the dependency set and adding one just for
-/// three icons isn't worth it.
+/// Brand icons come from `font_awesome_flutter` (`FontAwesomeIcons.facebook`
+/// / `.instagram` / `.whatsapp`).
 class SocialIconsRow extends StatelessWidget {
   final MainAxisAlignment alignment;
   const SocialIconsRow({super.key, this.alignment = MainAxisAlignment.center});

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 
 class OrderSuccessPage extends StatelessWidget {
@@ -19,7 +20,10 @@ class OrderSuccessPage extends StatelessWidget {
               const Text('راح نتواصل معك قريبًا لتأكيد الطلب وتفاصيل التوصيل.', textAlign: TextAlign.center),
               const SizedBox(height: 24),
               FilledButton(
-                onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
+                onPressed: () {
+                  Navigator.of(context).pop(); // dismiss this plain-pushed confirmation screen
+                  context.go('/'); // explicitly route home via go_router, regardless of current stack state
+                },
                 child: const Text('العودة للمتجر'),
               ),
             ],

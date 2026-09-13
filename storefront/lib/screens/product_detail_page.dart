@@ -140,6 +140,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         const SizedBox(height: 4),
         PriceDisplay(
             product: product, fontSize: 22, originalFontSize: 16, decimals: 2),
+        if (product.description.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            product.description,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
         const SizedBox(height: 16),
         Text('اللون', style: Theme.of(context).textTheme.bodyLarge),
         const SizedBox(height: 8),

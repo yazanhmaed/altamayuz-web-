@@ -112,6 +112,10 @@ class OrderModel {
   final String address; // city
   final String area;    // area/neighbourhood
   final String street;  // optional extra details
+  // Free-form admin note about a discount given (e.g. "خصم 5 د.أ") — never
+  // computed against item prices, purely a reference annotation for manual
+  // orders. Unrelated to the storefront's cartDiscountAmount/tier fields below.
+  final String discountNote;
   final List<OrderItem> items;
   List<String> qrCode;
   final DateTime createdAt;
@@ -139,6 +143,7 @@ class OrderModel {
     required this.address,
     this.area = '',
     required this.street,
+    this.discountNote = '',
     required this.items,
     required this.qrCode,
     required this.createdAt,
@@ -163,6 +168,7 @@ class OrderModel {
     String? address,
     String? area,
     String? street,
+    String? discountNote,
     List<OrderItem>? items,
     List<String>? qrCode,
     DateTime? createdAt,
@@ -182,6 +188,7 @@ class OrderModel {
       address: address ?? this.address,
       area: area ?? this.area,
       street: street ?? this.street,
+      discountNote: discountNote ?? this.discountNote,
       items: items ?? this.items,
       qrCode: qrCode ?? this.qrCode,
       createdAt: createdAt ?? this.createdAt,
@@ -204,6 +211,7 @@ class OrderModel {
     'address': address,
     'area': area,
     'street': street,
+    'discountNote': discountNote,
     'items': items.map((e) => e.toMap()).toList(),
     'qrCode': qrCode,
     // Canonical stored type for `createdAt` is a Firestore Timestamp, matching
@@ -231,6 +239,7 @@ class OrderModel {
       address: map['address'] as String? ?? '',
       area: map['area'] as String? ?? '',
       street: map['street'] as String? ?? '',
+      discountNote: map['discountNote'] as String? ?? '',
       items: (map['items'] as List)
           .map((e) => OrderItem.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList(),

@@ -21,6 +21,7 @@ class OrderCubit extends Cubit<OrderState> {
   final addressCtrl = TextEditingController();
   final areaCtrl = TextEditingController();
   final streetCtrl = TextEditingController();
+  final discountNoteCtrl = TextEditingController();
   final destinationCtrl = TextEditingController();
   final deliveryDateCtrl = TextEditingController();
   final qrCodeCtrl = TextEditingController();
@@ -77,6 +78,7 @@ class OrderCubit extends Cubit<OrderState> {
     addressCtrl.clear();
     areaCtrl.clear();
     streetCtrl.clear();
+    discountNoteCtrl.clear();
     destinationCtrl.clear();
     deliveryDateCtrl.clear();
     qrCodeCtrl.clear();
@@ -91,6 +93,7 @@ class OrderCubit extends Cubit<OrderState> {
     addressCtrl.text = orderModel.address;
     areaCtrl.text = orderModel.area;
     streetCtrl.text = orderModel.street;
+    discountNoteCtrl.text = orderModel.discountNote;
     destinationCtrl.text = orderModel.destination;
     deliveryDateCtrl.text = orderModel.deliveryDate;
     qrCodeCtrl.text = orderModel.qrCode.isNotEmpty ? orderModel.qrCode.first : '';
@@ -113,6 +116,7 @@ class OrderCubit extends Cubit<OrderState> {
       address: addressCtrl.text.trim(),
       area: areaCtrl.text.trim(),
       street: streetCtrl.text.trim(),
+      discountNote: discountNoteCtrl.text.trim(),
       items: List.of(selectedItems),
       qrCode: qrCodeCtrl.text.trim().isNotEmpty
           ? [qrCodeCtrl.text.trim()]
@@ -526,6 +530,7 @@ class OrderCubit extends Cubit<OrderState> {
     addressCtrl.dispose();
     areaCtrl.dispose();
     streetCtrl.dispose();
+    discountNoteCtrl.dispose();
     destinationCtrl.dispose();
     deliveryDateCtrl.dispose();
     qrCodeCtrl.dispose();

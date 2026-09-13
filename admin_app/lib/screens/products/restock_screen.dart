@@ -43,21 +43,48 @@ class _RestockScreenState extends State<RestockScreen> {
           children: [
             ...List.generate(cubit.restockRows.length, (index) {
               final row = cubit.restockRows[index];
+              final sizes = widget.product.stock[row.colorCtrl.text]?.keys.toList() ?? [];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
                     Expanded(
-                      child: TextFormField(
-                        controller: row.colorCtrl,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: row.colorCtrl.text.isNotEmpty ? row.colorCtrl.text : null,
                         decoration: const InputDecoration(labelText: 'اللون', border: OutlineInputBorder()),
+                        items: widget.product.colors.isEmpty
+                            ? null
+                            : widget.product.colors
+                                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                                .toList(),
+                        hint: widget.product.colors.isEmpty
+                            ? const Text('لا توجد ألوان مضافة لهذا المنتج')
+                            : null,
+                        onChanged: widget.product.colors.isEmpty
+                            ? null
+                            : (value) {
+                                if (value != null) cubit.setRestockRowColor(index, value);
+                              },
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: TextFormField(
-                        controller: row.sizeCtrl,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: row.sizeCtrl.text.isNotEmpty ? row.sizeCtrl.text : null,
                         decoration: const InputDecoration(labelText: 'المقاس', border: OutlineInputBorder()),
+                        items: sizes.isEmpty
+                            ? null
+                            : sizes.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                        hint: sizes.isEmpty
+                            ? Text(row.colorCtrl.text.isEmpty
+                                ? 'اختر لونًا أولًا'
+                                : 'لا توجد مقاسات لهذا اللون')
+                            : null,
+                        onChanged: sizes.isEmpty
+                            ? null
+                            : (value) {
+                                if (value != null) cubit.setRestockRowSize(index, value);
+                              },
                       ),
                     ),
                     const SizedBox(width: 8),

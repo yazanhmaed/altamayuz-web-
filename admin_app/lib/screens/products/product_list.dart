@@ -5,6 +5,7 @@ import '../../cubit/inventory/inventory_cubit.dart';
 import '../../cubit/inventory/inventory_state.dart';
 import '../../data/product/product_model.dart';
 import 'add_product.dart';
+import 'import_review_screen.dart';
 import 'restock_screen.dart';
 
 class ProductListScreen extends StatefulWidget {
@@ -31,7 +32,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
             tooltip: 'استيراد من إكسل',
             icon: const Icon(Icons.upload_file_outlined),
             onPressed: () =>
-                context.read<InventoryCubit>().importProductsFromExcel(),
+                context.read<InventoryCubit>().pickAndParseExcelForImport(),
           ),
           IconButton(
             tooltip: 'تصدير إلى إكسل',
@@ -49,6 +50,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
           } else if (state is InventoryError) {
             ScaffoldMessenger.of(context)
                 .showSnackBar(SnackBar(content: Text(state.message)));
+          } else if (state is InventoryImportReviewReady) {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ImportReviewScreen()),
+            );
           }
         },
         builder: (context, state) {

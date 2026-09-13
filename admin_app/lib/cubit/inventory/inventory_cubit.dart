@@ -58,6 +58,38 @@ class RestockRowControllers {
   }
 }
 
+/// One product parsed from an Excel import, awaiting review before commit.
+/// `existingImageUrls` carries whatever `imageUrls` the product already has
+/// in Firestore (empty if the product is new); `pendingImages` holds any
+/// image freshly picked during the review screen, keyed by color — only
+/// these get uploaded when the import is confirmed. `price`/`category` are
+/// the NEW value to write when provided in the sheet; null means "keep
+/// whatever this product already has" (only possible when `!isNew` — a
+/// brand-new product is rejected during parsing if its price is missing).
+class PendingImportProduct {
+  final String name;
+  final Set<String> colors;
+  final Map<String, Map<String, int>> stock;
+  double? price;
+  String? category;
+  int? threshold;
+  final Map<String, String> existingImageUrls; // color -> already-uploaded URL
+  final Map<String, XFile> pendingImages; // color -> newly picked this session
+  final bool isNew;
+
+  PendingImportProduct({
+    required this.name,
+    required this.colors,
+    required this.stock,
+    this.price,
+    this.category,
+    this.threshold,
+    Map<String, String>? existingImageUrls,
+    required this.isNew,
+  })  : existingImageUrls = existingImageUrls ?? {},
+        pendingImages = {};
+}
+
 class InventoryCubit extends Cubit<InventoryState> {
   InventoryCubit() : super(InventoryInitial()) {
     colorRows.first.qtyCtrls.add(SizeQtyRow());
@@ -74,6 +106,7 @@ class InventoryCubit extends Cubit<InventoryState> {
   final salePriceCtrl = TextEditingController();
   final lowStockCtrl = TextEditingController(text: '1');
   final categoryCtrl = TextEditingController(text: 'عام');
+  final descriptionCtrl = TextEditingController();
   bool addingNewCategory = false;
   final List<ColorFormRow> colorRows = [ColorFormRow()];
 
@@ -96,6 +129,10 @@ class InventoryCubit extends Cubit<InventoryState> {
   // ---- restock-only form state ----
   ProductModel? restockProduct;
   final List<RestockRowControllers> restockRows = [RestockRowControllers()];
+
+  // ---- Excel import review state ----
+  List<PendingImportProduct> pendingImportItems = [];
+  List<String> pendingImportErrors = [];
 
   Future<void> fetchProducts({bool refresh = false}) async {
     if (_hasFetched && !refresh) {
@@ -137,6 +174,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     salePriceCtrl.clear();
     lowStockCtrl.text = '1';
     categoryCtrl.text = 'عام';
+    descriptionCtrl.clear();
     addingNewCategory = false;
     isActive = true;
     isFeatured = false;
@@ -163,6 +201,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     salePriceCtrl.text = product.salePrice?.toString() ?? '';
     lowStockCtrl.text = product.lowStockThreshold.toString();
     categoryCtrl.text = product.category;
+    descriptionCtrl.text = product.description;
     addingNewCategory = false;
     isActive = product.isActive;
     isFeatured = product.isFeatured;
@@ -326,6 +365,7 @@ class InventoryCubit extends Cubit<InventoryState> {
       isActive: isActive,
       isFeatured: isFeatured,
       category: trimmedCategory.isEmpty ? 'عام' : trimmedCategory,
+      description: descriptionCtrl.text.trim(),
       lowStockThreshold: int.tryParse(normalizeDigits(lowStockCtrl.text.trim())) ?? 1,
       createdAt: editingProduct?.createdAt ?? now,
       updatedAt: now,
@@ -411,6 +451,18 @@ class InventoryCubit extends Cubit<InventoryState> {
     }
   }
 
+  void setRestockRowColor(int index, String color) {
+    final row = restockRows[index];
+    row.colorCtrl.text = color;
+    row.sizeCtrl.text = ''; // reset, since sizes differ per color
+    emit(InventoryFormChanged());
+  }
+
+  void setRestockRowSize(int index, String size) {
+    restockRows[index].sizeCtrl.text = size;
+    emit(InventoryFormChanged());
+  }
+
   Future<void> addStockQuantities({
     required String productId,
     required Map<String, Map<String, int>> additions, // color -> size -> qtyToAdd
@@ -478,8 +530,16 @@ class InventoryCubit extends Cubit<InventoryState> {
     return v.toString().trim();
   }
 
-  /// Columns expected, in order: product name | color | size | quantity | low-stock threshold (optional)
-  Future<void> importProductsFromExcel() async {
+  /// Columns expected, in order: اسم المنتج | اللون | المقاس | الكمية |
+  /// السعر | التصنيف | حد التنبيه (كلها اختيارية عدا الاسم/اللون/المقاس،
+  /// والسعر مطلوب فقط للمنتجات الجديدة تمامًا — راجع [pickAndParseExcelForImport]).
+  ///
+  /// Parse-only — reads and validates the Excel file entirely in memory and
+  /// pre-loads each parsed product's existing `imageUrls` (if it already
+  /// exists in Firestore) for review, but writes nothing. The review screen
+  /// (driven by [pendingImportItems]) lets the admin pick/replace images
+  /// before [confirmImport] actually commits anything.
+  Future<void> pickAndParseExcelForImport() async {
     try {
       emit(InventoryLoading());
 
@@ -504,7 +564,9 @@ class InventoryCubit extends Cubit<InventoryState> {
         final color = row.length > 1 ? _cellText(row[1]) : '';
         final size = row.length > 2 ? _cellText(row[2]) : '';
         final qtyText = row.length > 3 ? _cellText(row[3]) : '';
-        final thresholdText = row.length > 4 ? _cellText(row[4]) : '';
+        final priceText = row.length > 4 ? _cellText(row[4]) : '';
+        final categoryText = row.length > 5 ? _cellText(row[5]) : '';
+        final thresholdText = row.length > 6 ? _cellText(row[6]) : '';
         if (name.isEmpty || color.isEmpty || size.isEmpty) continue;
 
         final qty = int.tryParse(normalizeDigits(qtyText)) ?? 0;
@@ -513,6 +575,10 @@ class InventoryCubit extends Cubit<InventoryState> {
         entry.stock.putIfAbsent(color, () => {});
         entry.stock[color]![size] = qty;
 
+        // Last non-empty value across a product's rows wins — same
+        // aggregation rule already used for the threshold column.
+        if (priceText.isNotEmpty) entry.priceText = priceText;
+        if (categoryText.isNotEmpty) entry.categoryText = categoryText;
         final threshold = int.tryParse(normalizeDigits(thresholdText));
         if (threshold != null) entry.threshold = threshold;
       }
@@ -522,43 +588,116 @@ class InventoryCubit extends Cubit<InventoryState> {
         return;
       }
 
-      final nowIso = DateTime.now().toIso8601String();
-      var successCount = 0;
+      final List<PendingImportProduct> results = [];
+      final List<String> errors = [];
 
       for (final entry in parsed.values) {
         final docRef = _db.collection('products').doc(entry.name);
         final snap = await docRef.get();
         final exists = snap.exists;
 
+        double? price = double.tryParse(normalizeDigits(entry.priceText));
+        if (price == null && !exists) {
+          errors.add('${entry.name}: السعر مطلوب للمنتجات الجديدة.');
+          continue;
+        }
+
+        results.add(PendingImportProduct(
+          name: entry.name,
+          colors: entry.colors,
+          stock: entry.stock,
+          price: price,
+          category: entry.categoryText.isNotEmpty ? entry.categoryText : null,
+          threshold: entry.threshold,
+          existingImageUrls: exists
+              ? Map<String, String>.from(snap.data()?['imageUrls'] ?? {})
+              : {},
+          isNew: !exists,
+        ));
+      }
+
+      if (results.isEmpty) {
+        emit(InventoryError(errors.isNotEmpty
+            ? 'فشل الاستيراد بالكامل:\n${errors.join('\n')}'
+            : 'لم يتم العثور على بيانات صالحة في الملف.'));
+        return;
+      }
+
+      pendingImportItems
+        ..clear()
+        ..addAll(results);
+      pendingImportErrors = errors;
+      emit(InventoryImportReviewReady(results, errors));
+    } catch (e) {
+      emit(InventoryError('فشل تحليل الملف: $e'));
+    }
+  }
+
+  void setPendingImportImage(String productName, String color, XFile file) {
+    final item = pendingImportItems.firstWhere((p) => p.name == productName);
+    item.pendingImages[color] = file;
+    emit(InventoryFormChanged());
+  }
+
+  void cancelImport() {
+    pendingImportItems.clear();
+    pendingImportErrors = [];
+    emit(InventoryFormChanged());
+  }
+
+  Future<void> confirmImport() async {
+    try {
+      emit(InventoryLoading());
+      final nowIso = DateTime.now().toIso8601String();
+      var successCount = 0;
+
+      for (final item in pendingImportItems) {
+        final imageUrls = Map<String, String>.from(item.existingImageUrls);
+        for (final entry in item.pendingImages.entries) {
+          imageUrls[entry.key] = await uploadColorImage(
+            productId: item.name,
+            color: entry.key,
+            imageFile: entry.value,
+          );
+        }
+
+        final docRef = _db.collection('products').doc(item.name);
+        final snap = await docRef.get();
+        final exists = snap.exists;
         final existingColors = exists
             ? List<String>.from((snap.data()?['colors'] as List?) ?? [])
             : <String>[];
-        final mergedColors = {...existingColors, ...entry.colors}.toList();
+        final mergedColors = {...existingColors, ...item.colors}.toList();
 
         final Map<String, dynamic> updateData = {
-          'id': entry.name,
-          'name': entry.name,
+          'id': item.name,
+          'name': item.name,
           'colors': mergedColors,
-          'stock': entry.stock,
+          'stock': item.stock,
+          'imageUrls': imageUrls,
           'updatedAt': nowIso,
           'isActive': true,
         };
-
+        if (item.price != null) updateData['price'] = item.price;
+        if (item.category != null) updateData['category'] = item.category;
         if (!exists) {
           updateData['createdAt'] = nowIso;
-          updateData['lowStockThreshold'] = entry.threshold ?? 1;
-        } else if (entry.threshold != null) {
-          updateData['lowStockThreshold'] = entry.threshold;
+          updateData['lowStockThreshold'] = item.threshold ?? 1;
+          updateData['category'] ??= 'عام';
+        } else if (item.threshold != null) {
+          updateData['lowStockThreshold'] = item.threshold;
         }
 
         await docRef.set(updateData, SetOptions(merge: true));
         successCount++;
       }
 
+      pendingImportItems.clear();
+      pendingImportErrors = [];
       await fetchProducts(refresh: true);
-      emit(InventorySuccess('تم استيراد/تعديل $successCount منتج بنجاح.'));
+      emit(InventorySuccess('تم استيراد $successCount منتج بنجاح.'));
     } catch (e) {
-      emit(InventoryError('فشل الاستيراد: $e'));
+      emit(InventoryError('فشل تأكيد الاستيراد: $e'));
     }
   }
 
@@ -576,12 +715,16 @@ class InventoryCubit extends Cubit<InventoryState> {
         xls.TextCellValue('اللون'),
         xls.TextCellValue('المقاس'),
         xls.TextCellValue('الكمية'),
+        xls.TextCellValue('السعر'),
+        xls.TextCellValue('التصنيف'),
         xls.TextCellValue('حد التنبيه'),
       ]);
 
       for (final doc in snap.docs) {
         final data = doc.data();
         final name = data['name'] as String? ?? doc.id;
+        final price = (data['price'] as num?)?.toString() ?? '';
+        final category = data['category'] as String? ?? '';
         final threshold = data['lowStockThreshold']?.toString() ?? '';
         final stock = Map<String, dynamic>.from(data['stock'] as Map? ?? {});
 
@@ -593,6 +736,8 @@ class InventoryCubit extends Cubit<InventoryState> {
               xls.TextCellValue(color),
               xls.TextCellValue(size),
               xls.IntCellValue((qty as num).toInt()),
+              xls.TextCellValue(price),
+              xls.TextCellValue(category),
               xls.TextCellValue(threshold),
             ]);
           });
@@ -628,6 +773,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     salePriceCtrl.dispose();
     lowStockCtrl.dispose();
     categoryCtrl.dispose();
+    descriptionCtrl.dispose();
     for (final row in colorRows) {
       row.dispose();
     }
@@ -645,6 +791,8 @@ class _ImportedProduct {
   final String name;
   final Set<String> colors = {};
   final Map<String, Map<String, int>> stock = {};
+  String priceText = '';
+  String categoryText = '';
   int? threshold;
   _ImportedProduct(this.name);
 }

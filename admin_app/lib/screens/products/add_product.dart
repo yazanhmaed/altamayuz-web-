@@ -68,6 +68,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              TextFormField(
+                controller: cubit.descriptionCtrl,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'وصف المنتج (اختياري)',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
               Labeled(
                 label: 'التصنيف',
                 child: cubit.addingNewCategory

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -148,7 +150,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
       ),
       // Firestore reads active on this screen: this one products stream, plus
       // CartDiscountBanner's single one-time settings/cartDiscountTiers get().
-      // Everything below — search filter, featured/hero/carousel, on-sale
+      // Everything below — search filter, featured hero slider, on-sale
       // offers, category counts/covers — is derived client-side from this one
       // `all` list, not separate queries.
       //
@@ -204,10 +206,6 @@ class _StoreHomePageState extends State<StoreHomePage> {
               : _gridItems;
           final featured =
               all.where((p) => p.isFeatured && p.isAvailable).toList();
-          final hero = featured.isNotEmpty ? featured.first : null;
-          final carousel = featured.length > 1
-              ? featured.sublist(1)
-              : <PublicProductModel>[];
           final offers = all.where((p) => p.isOnSale && p.isAvailable).toList();
           // One entry per category, with a product count and the first
           // product's image (used as the category card cover).
@@ -286,8 +284,9 @@ class _StoreHomePageState extends State<StoreHomePage> {
                         ),
                       ),
                     ),
-                    if (hero != null && _query.isEmpty)
-                      SliverToBoxAdapter(child: _HeroBanner(product: hero)),
+                    if (featured.isNotEmpty && _query.isEmpty)
+                      SliverToBoxAdapter(
+                          child: _HeroBanner(products: featured)),
                     if (offers.isNotEmpty && _query.isEmpty) ...[
                       SliverToBoxAdapter(
                         child: Padding(
@@ -319,30 +318,6 @@ class _StoreHomePageState extends State<StoreHomePage> {
                             itemBuilder: (context, i) => SizedBox(
                                 width: 150,
                                 child: ProductCard(product: offers[i])),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (carousel.isNotEmpty && _query.isEmpty) ...[
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-                          child: Text('الأكثر تميزًا',
-                              style: Theme.of(context).textTheme.titleMedium),
-                        ),
-                      ),
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: 220,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: carousel.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: 12),
-                            itemBuilder: (context, i) => SizedBox(
-                                width: 150,
-                                child: ProductCard(product: carousel[i])),
                           ),
                         ),
                       ),
@@ -570,76 +545,173 @@ class _CategoryCardsSectionState extends State<_CategoryCardsSection> {
   }
 }
 
-class _HeroBanner extends StatelessWidget {
+/// Hero banner: a single static slide when there's exactly one featured
+/// product (identical to the original single-banner behaviour — no dots, no
+/// auto-advance), or an auto-advancing, swipeable `PageView` slider showing
+/// every featured product once each when there's more than one.
+class _HeroBanner extends StatefulWidget {
+  final List<PublicProductModel> products;
+  const _HeroBanner({required this.products});
+
+  @override
+  State<_HeroBanner> createState() => _HeroBannerState();
+}
+
+class _HeroBannerState extends State<_HeroBanner> {
+  static const _autoAdvanceInterval = Duration(seconds: 5);
+
+  late final PageController _pageController = PageController();
+  Timer? _timer;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.products.length > 1) _startTimer();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(_autoAdvanceInterval, (_) {
+      final next = (_currentPage + 1) % widget.products.length;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  // Restarts the countdown from zero — called both after the timer's own
+  // auto-advance and after a manual swipe, so a manual swipe never fights
+  // with an auto-advance that's about to fire.
+  void _restartTimer() {
+    _timer?.cancel();
+    if (widget.products.length > 1) _startTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      height: 320,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: AppColors.border,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.products.length,
+            onPageChanged: (i) {
+              setState(() => _currentPage = i);
+              _restartTimer();
+            },
+            itemBuilder: (context, i) => _HeroSlide(product: widget.products[i]),
+          ),
+          if (widget.products.length > 1)
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < widget.products.length; i++)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: i == _currentPage ? 20 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(
+                            alpha: i == _currentPage ? 1 : 0.5),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single hero slide's content — image, gradient, name, price, CTA — for
+/// one product. Unchanged from the original single-banner design; `_HeroBanner`
+/// now pages through one of these per featured product instead of always
+/// showing one.
+class _HeroSlide extends StatelessWidget {
   final PublicProductModel product;
-  const _HeroBanner({required this.product});
+  const _HeroSlide({required this.product});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => context.go('/product/${product.id}', extra: product),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        height: 320,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: AppColors.border,
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Hero is the largest, most prominent image on the page (full
-            // width, 320 tall) — kept at a generous cache size so it stays
-            // crisp, still below the ~1600px source.
-            StoreImage(url: product.coverImage, cacheWidth: 1200),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.65)
-                  ],
-                  stops: const [0.4, 1],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(product.name,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  PriceDisplay(
-                    product: product,
-                    fontSize: 16,
-                    baseColor: Colors.white,
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: const Text('تسوّق الآن',
-                        style: TextStyle(
-                            color: AppColors.accent,
-                            fontWeight: FontWeight.w700)),
-                  ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Hero is the largest, most prominent image on the page (full
+          // width, 320 tall) — kept at a generous cache size so it stays
+          // crisp, still below the ~1600px source.
+          StoreImage(url: product.coverImage, cacheWidth: 1200),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.65)
                 ],
+                stops: const [0.4, 1],
               ),
             ),
-          ],
-        ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(product.name,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                PriceDisplay(
+                  product: product,
+                  fontSize: 16,
+                  baseColor: Colors.white,
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10)),
+                  child: const Text('تسوّق الآن',
+                      style: TextStyle(
+                          color: AppColors.accent,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

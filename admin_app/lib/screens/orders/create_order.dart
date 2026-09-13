@@ -210,6 +210,15 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     ),
                   );
                 }),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: cubit.discountNoteCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظة خصم (اختياري)',
+                    hintText: 'مثال: خصم 5 د.أ أو خصم 10%',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: isSaving

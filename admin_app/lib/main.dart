@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'cubit/inventory/inventory_cubit.dart';
 import 'cubit/order/order_cubit.dart';
@@ -32,6 +33,9 @@ Future<void> registerOwnerToken() async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Required once before any `DateFormat(..., 'ar')` call (e.g. order_card.dart's
+  // creation-date display) — intl throws a LocaleDataException otherwise.
+  await initializeDateFormatting('ar');
   await registerOwnerToken();
   runApp(const AdminApp());
 }

@@ -95,9 +95,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         cartController.clear();
       }
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
+      Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const OrderSuccessPage()),
-        (route) => route.isFirst,
       );
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;

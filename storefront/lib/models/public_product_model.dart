@@ -27,6 +27,7 @@ class PublicProductModel {
   final double? salePrice;
   final bool isFeatured;
   final String category;
+  final String description;
   final List<ProductVariant> variants;
 
   const PublicProductModel({
@@ -36,6 +37,7 @@ class PublicProductModel {
     this.salePrice,
     required this.isFeatured,
     required this.category,
+    this.description = '',
     required this.variants,
   });
 
@@ -62,6 +64,7 @@ class PublicProductModel {
       salePrice: (map['salePrice'] as num?)?.toDouble(),
       isFeatured: map['isFeatured'] as bool? ?? false,
       category: map['category'] as String? ?? 'عام',
+      description: map['description'] as String? ?? '',
       variants: (map['variants'] as List)
           .map((v) => ProductVariant.fromMap(Map<String, dynamic>.from(v as Map)))
           .toList(),
@@ -103,6 +106,7 @@ class PublicProductModel {
       salePrice: (map['salePrice'] as num?)?.toDouble(),
       isFeatured: map['isFeatured'] as bool? ?? false,
       category: map['category'] as String? ?? 'عام',
+      description: map['description'] as String? ?? '',
       variants: variants,
     );
   }
