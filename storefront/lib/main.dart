@@ -1,9 +1,11 @@
+import 'dart:ui';
+
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
+import 'analytics.dart';
 import 'firebase_options.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
@@ -12,6 +14,31 @@ Future<void> main() async {
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // No Flutter Web implementation of Firebase Crashlytics exists yet, so
+  // uncaught errors are reported as Analytics events instead — the closest
+  // available stand-in for crash reporting on this platform.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    analytics.logEvent(
+      name: 'app_exception',
+      parameters: {
+        'error': details.exceptionAsString(),
+        'stack': details.stack.toString(),
+      },
+    );
+  };
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    analytics.logEvent(
+      name: 'app_exception',
+      parameters: {
+        'error': error.toString(),
+        'stack': stack.toString(),
+      },
+    );
+    return true;
+  };
+
   runApp(const StorefrontApp());
 }
 

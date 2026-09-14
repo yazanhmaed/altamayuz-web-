@@ -13,6 +13,7 @@ class ProductModel {
   final int lowStockThreshold;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final Map<String, double> sizeGuideCm; // global size label -> foot length (cm)
 
   const ProductModel({
     required this.id,
@@ -29,6 +30,7 @@ class ProductModel {
     required this.lowStockThreshold,
     required this.createdAt,
     required this.updatedAt,
+    this.sizeGuideCm = const {},
   });
 
   int get totalQty => stock.values
@@ -60,6 +62,7 @@ class ProductModel {
     int? lowStockThreshold,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Map<String, double>? sizeGuideCm,
   }) {
     return ProductModel(
       id: id ?? this.id,
@@ -76,6 +79,7 @@ class ProductModel {
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
+      sizeGuideCm: sizeGuideCm ?? this.sizeGuideCm,
     );
   }
 
@@ -94,6 +98,7 @@ class ProductModel {
     'lowStockThreshold': lowStockThreshold,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
+    'sizeGuideCm': sizeGuideCm,
   };
 
   factory ProductModel.fromMap(Map<String, dynamic> map) {
@@ -119,6 +124,7 @@ class ProductModel {
       lowStockThreshold: (map['lowStockThreshold'] as num?)?.toInt() ?? 1,
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(map['updatedAt'] as String? ?? '') ?? DateTime.now(),
+      sizeGuideCm: (map['sizeGuideCm'] as Map?)?.map((k, v) => MapEntry(k as String, (v as num).toDouble())) ?? {},
     );
   }
 

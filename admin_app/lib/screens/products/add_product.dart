@@ -241,6 +241,32 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   );
                 }),
               ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('إضافة جدول مقاسات (اختياري)'),
+                subtitle: const Text('يوضح للعميل طول القدم بالسم لكل مقاس'),
+                value: cubit.addSizeGuide,
+                onChanged: (value) {
+                  cubit.toggleSizeGuide(value);
+                  setState(() {});
+                },
+              ),
+              if (cubit.addSizeGuide)
+                ...List.generate(cubit.globalSizeCtrls.length, (i) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: TextFormField(
+                      controller: cubit.sizeGuideCtrls[i],
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [ArabicDigitsInputFormatter()],
+                      decoration: InputDecoration(
+                        labelText: 'مقاس ${cubit.globalSizeCtrls[i].text} — الطول بالسم',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  );
+                }),
               const SizedBox(height: 20),
               Row(
                 children: [

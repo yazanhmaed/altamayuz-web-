@@ -29,6 +29,7 @@ class PublicProductModel {
   final String category;
   final String description;
   final List<ProductVariant> variants;
+  final Map<String, double> sizeGuideCm;
 
   const PublicProductModel({
     required this.id,
@@ -39,6 +40,7 @@ class PublicProductModel {
     required this.category,
     this.description = '',
     required this.variants,
+    this.sizeGuideCm = const {},
   });
 
   bool get isOnSale => salePrice != null && salePrice! > 0 && salePrice! < price;
@@ -108,6 +110,9 @@ class PublicProductModel {
       category: map['category'] as String? ?? 'عام',
       description: map['description'] as String? ?? '',
       variants: variants,
+      sizeGuideCm: (map['sizeGuideCm'] as Map?)
+              ?.map((k, v) => MapEntry(k as String, (v as num).toDouble())) ??
+          {},
     );
   }
 }

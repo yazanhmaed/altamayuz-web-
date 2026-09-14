@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import '../analytics.dart';
 import '../cart/cart_controller.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
@@ -43,9 +44,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       _selectedVariant = preloaded.variants.firstWhere((v) => v.isAvailable,
           orElse: () => preloaded.variants.first);
       _loading = false;
+      _logViewItem(preloaded);
     } else {
       _fetchProduct();
     }
+  }
+
+  void _logViewItem(PublicProductModel product) {
+    analytics.logEvent(
+      name: 'view_item',
+      parameters: {
+        'item_id': product.id,
+        'item_name': product.name,
+        'price': product.effectivePrice,
+      },
+    );
   }
 
   Future<void> _fetchProduct() async {
@@ -70,6 +83,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       }
       _loading = false;
     });
+    if (product != null) _logViewItem(product);
   }
 
   void _selectColor(ProductVariant v) {
@@ -95,6 +109,77 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           child: ImageViewerPage(imageUrl: _selectedVariant.imageUrl),
         ),
       ),
+    );
+  }
+
+  void _showSizeGuide(BuildContext context, Map<String, double> sizes) {
+    final sorted = sizes.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(color: Colors.black12, blurRadius: 20, spreadRadius: 5),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('دليل المقاسات',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  Table(
+                    border: TableBorder.all(
+                        color: AppColors.border, borderRadius: BorderRadius.circular(8)),
+                    children: [
+                      const TableRow(
+                        decoration: BoxDecoration(color: AppColors.accentSoft),
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                            child: Text('المقاس',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                            child: Text('طول القدم (سم)',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                      for (final entry in sorted)
+                        TableRow(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              child: Text(entry.key, textAlign: TextAlign.center),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              child: Text(entry.value.toString(), textAlign: TextAlign.center),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -230,6 +315,27 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             );
           }).toList(),
         ),
+        if (product.sizeGuideCm.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () => _showSizeGuide(context, product.sizeGuideCm),
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.straighten, size: 16, color: AppColors.accent),
+                  SizedBox(width: 6),
+                  Text('دليل المقاسات',
+                      style: TextStyle(
+                          color: AppColors.accent,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         OutlinedButton(
           onPressed: _selectedSize == null
@@ -237,6 +343,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               : () {
                   HapticFeedback.selectionClick();
                   cartController.add(product, _selectedVariant, _selectedSize!);
+                  analytics.logEvent(
+                    name: 'add_to_cart',
+                    parameters: {
+                      'item_id': product.id,
+                      'item_name': product.name,
+                      'price': product.effectivePrice,
+                      'quantity': 1,
+                    },
+                  );
                   showAddedToCartToast(context, product.name);
                 },
           child: const Text('إضافة للسلة'),

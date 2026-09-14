@@ -1,7 +1,9 @@
 import 'dart:developer';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
+import '../analytics.dart';
 import '../cart/cart_controller.dart';
 import '../data/cart_discount_repository.dart';
 import '../models/cart_discount.dart';
@@ -57,6 +59,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // Network hiccup reading config — proceed with no cart discount rather
       // than blocking checkout. The server still applies any real discount.
     });
+    analytics.logEvent(
+      name: 'begin_checkout',
+      parameters: {'value': _total, 'currency': 'JOD'},
+    );
   }
 
   @override
@@ -90,6 +96,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 })
             .toList(),
       });
+
+      analytics.logPurchase(
+        value: _total - _discount.amount,
+        currency: 'JOD',
+        items: _items
+            .map((l) => AnalyticsEventItem(
+                  itemId: l.product.id,
+                  itemName: l.product.name,
+                  quantity: l.quantity,
+                ))
+            .toList(),
+      );
 
       if (widget.buyNowItem == null) {
         cartController.clear();

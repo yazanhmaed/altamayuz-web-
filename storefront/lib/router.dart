@@ -1,5 +1,7 @@
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:go_router/go_router.dart';
 
+import 'analytics.dart';
 import 'cart/cart_controller.dart';
 import 'models/public_product_model.dart';
 import 'screens/about_page.dart';
@@ -12,6 +14,7 @@ import 'screens/shipping_policy_page.dart';
 import 'screens/store_home_page.dart';
 
 final GoRouter appRouter = GoRouter(
+  observers: [FirebaseAnalyticsObserver(analytics: analytics)],
   routes: [
     GoRoute(
       path: '/',

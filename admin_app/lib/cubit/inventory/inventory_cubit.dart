@@ -118,6 +118,11 @@ class InventoryCubit extends Cubit<InventoryState> {
   bool isFeatured = false;
   ProductModel? editingProduct;
 
+  /// Optional size guide: one cm value per entry in [globalSizeCtrls],
+  /// aligned by index, active only while [addSizeGuide] is true.
+  bool addSizeGuide = false;
+  final List<TextEditingController> sizeGuideCtrls = [];
+
   /// Distinct categories currently in use, derived live from the loaded
   /// products cache — always includes the 'عام' (General) default so it's
   /// available even before any product has been saved.
@@ -191,6 +196,11 @@ class InventoryCubit extends Cubit<InventoryState> {
       ..clear()
       ..add(ColorFormRow()..qtyCtrls.add(SizeQtyRow()));
     pendingColorImages.clear();
+    addSizeGuide = false;
+    for (final c in sizeGuideCtrls) {
+      c.dispose();
+    }
+    sizeGuideCtrls.clear();
     emit(InventoryFormChanged());
   }
 
@@ -241,6 +251,18 @@ class InventoryCubit extends Cubit<InventoryState> {
         colorRows.add(row);
       }
     }
+
+    for (final c in sizeGuideCtrls) {
+      c.dispose();
+    }
+    sizeGuideCtrls.clear();
+    addSizeGuide = product.sizeGuideCm.isNotEmpty;
+    if (addSizeGuide) {
+      for (final sizeCtrl in globalSizeCtrls) {
+        final cm = product.sizeGuideCm[sizeCtrl.text];
+        sizeGuideCtrls.add(TextEditingController(text: cm?.toString() ?? ''));
+      }
+    }
     emit(InventoryFormChanged());
   }
 
@@ -256,6 +278,9 @@ class InventoryCubit extends Cubit<InventoryState> {
     for (final row in colorRows) {
       row.qtyCtrls.add(SizeQtyRow());
     }
+    if (addSizeGuide) {
+      sizeGuideCtrls.add(TextEditingController());
+    }
     emit(InventoryAddRow());
   }
 
@@ -269,7 +294,30 @@ class InventoryCubit extends Cubit<InventoryState> {
         row.qtyCtrls.removeAt(index);
       }
     }
+    if (index < sizeGuideCtrls.length) {
+      sizeGuideCtrls[index].dispose();
+      sizeGuideCtrls.removeAt(index);
+    }
     emit(InventoryAddRow());
+  }
+
+  void toggleSizeGuide(bool value) {
+    addSizeGuide = value;
+    if (value && sizeGuideCtrls.length != globalSizeCtrls.length) {
+      // (re)build one cm field per current global size, preserving any
+      // values already typed for sizes that still exist at the same index
+      final old = List<TextEditingController>.from(sizeGuideCtrls);
+      for (final c in sizeGuideCtrls) {
+        c.dispose();
+      }
+      sizeGuideCtrls
+        ..clear()
+        ..addAll(List.generate(
+          globalSizeCtrls.length,
+          (i) => TextEditingController(text: i < old.length ? old[i].text : ''),
+        ));
+    }
+    emit(InventoryFormChanged());
   }
 
   void removeColorRow(int index) {
@@ -352,6 +400,19 @@ class InventoryCubit extends Cubit<InventoryState> {
       stock[color] = sizeMap;
     }
 
+    final sizeGuideCm = <String, double>{};
+    if (addSizeGuide) {
+      for (var i = 0; i < globalSizeCtrls.length; i++) {
+        final size = globalSizeCtrls[i].text.trim();
+        if (size.isEmpty || i >= sizeGuideCtrls.length) continue;
+        final text = sizeGuideCtrls[i].text.trim();
+        if (text.isEmpty) continue;
+        final cm = double.tryParse(normalizeDigits(text));
+        if (cm == null) continue;
+        sizeGuideCm[size] = cm;
+      }
+    }
+
     final now = DateTime.now();
     final trimmedCategory = categoryCtrl.text.trim();
     return ProductModel(
@@ -369,6 +430,7 @@ class InventoryCubit extends Cubit<InventoryState> {
       lowStockThreshold: int.tryParse(normalizeDigits(lowStockCtrl.text.trim())) ?? 1,
       createdAt: editingProduct?.createdAt ?? now,
       updatedAt: now,
+      sizeGuideCm: sizeGuideCm,
     );
   }
 
@@ -778,6 +840,9 @@ class InventoryCubit extends Cubit<InventoryState> {
       row.dispose();
     }
     for (final c in globalSizeCtrls) {
+      c.dispose();
+    }
+    for (final c in sizeGuideCtrls) {
       c.dispose();
     }
     for (final r in restockRows) {
