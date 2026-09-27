@@ -1,3 +1,4 @@
+import 'package:altamayuz_storefront/widgets/cart_sheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -140,19 +141,22 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   const SizedBox(height: 16),
                   Table(
                     border: TableBorder.all(
-                        color: AppColors.border, borderRadius: BorderRadius.circular(8)),
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(8)),
                     children: [
                       const TableRow(
                         decoration: BoxDecoration(color: AppColors.accentSoft),
                         children: [
                           Padding(
-                            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                            padding: EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 8),
                             child: Text('المقاس',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                           Padding(
-                            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                            padding: EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 8),
                             child: Text('طول القدم (سم)',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(fontWeight: FontWeight.w700)),
@@ -163,12 +167,16 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                         TableRow(
                           children: [
                             Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                              child: Text(entry.key, textAlign: TextAlign.center),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 10, horizontal: 8),
+                              child:
+                                  Text(entry.key, textAlign: TextAlign.center),
                             ),
                             Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                              child: Text(entry.value.toString(), textAlign: TextAlign.center),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 10, horizontal: 8),
+                              child: Text(entry.value.toString(),
+                                  textAlign: TextAlign.center),
                             ),
                           ],
                         ),
@@ -400,8 +408,36 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     }
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         leading: const GoBackButton(),
         title: Text(product.name),
+        actions: [
+          ValueListenableBuilder<List<CartLine>>(
+            valueListenable: cartController,
+            builder: (context, cart, _) => Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.shopping_bag_outlined),
+                  onPressed: () => CartSheet.show(context),
+                ),
+                if (cart.isNotEmpty)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                          color: AppColors.accent, shape: BoxShape.circle),
+                      child: Text('${cartController.itemCount}',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 10)),
+                    ),
+                  ),
+              ],
+            ),
+          )
+        ],
       ),
       body: ResponsiveCenter(
         child: LayoutBuilder(

@@ -48,15 +48,25 @@ class ProductCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-                child: Text(product.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium),
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                  child: Text(product.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+              ),
+              Divider(
+                height: 1,
+                // ignore: deprecated_member_use
+                color: AppColors.border.withOpacity(0.5),
+                indent: 30,
+                endIndent: 30,
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                padding: const EdgeInsets.fromLTRB(12, 5, 12, 8),
                 child: Row(
                   children: [
                     // In a ~2-column grid cell at 320px the content box is only

@@ -40,6 +40,8 @@ Future<void> main() async {
   };
 
   runApp(const StorefrontApp());
+  
+
 }
 
 /// App-wide scroll feel. Guarantees touch-drag scrolling is enabled on web
