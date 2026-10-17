@@ -112,7 +112,6 @@ class _StoreHomePageState extends State<StoreHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false,
       // Home-only, same boundary as StoreFooter. Flutter docks the FAB above
       // Scaffold.bottomSheet (the CartBar), so it won't collide with it.
       floatingActionButton: const WhatsAppFab(),
@@ -160,273 +159,285 @@ class _StoreHomePageState extends State<StoreHomePage> {
       // navigation instead of reusing this already-loaded list — a redundant
       // full re-read. Fine for a small shop; revisit (shared repository /
       // cache) before the catalog grows large.
-      body: StreamBuilder<QuerySnapshot>(
-        // Bounded "catalog snapshot": powers hero / offers / featured /
-        // category cards, and search results. `.limit(300)` is a safety cap
-        // against unbounded growth, not a pagination mechanism — the "كل
-        // المنتجات" grid has its own cursor pagination (_loadNextPage) for
-        // the section whose length actually grows unbounded.
-        stream: FirebaseFirestore.instance
-            .collection('products')
-            .where('isActive', isEqualTo: true)
-            .limit(300)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return ResponsiveCenter(
-              child: GridView.builder(
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.68,
+      // Tapping anywhere outside the search field closes the keyboard; inner
+      // tap targets still win the gesture arena.
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: StreamBuilder<QuerySnapshot>(
+          // Bounded "catalog snapshot": powers hero / offers / featured /
+          // category cards, and search results. `.limit(300)` is a safety cap
+          // against unbounded growth, not a pagination mechanism — the "كل
+          // المنتجات" grid has its own cursor pagination (_loadNextPage) for
+          // the section whose length actually grows unbounded.
+          stream: FirebaseFirestore.instance
+              .collection('products')
+              .where('isActive', isEqualTo: true)
+              .limit(300)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return ResponsiveCenter(
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 0.68,
+                  ),
+                  itemCount: 6,
+                  itemBuilder: (_, __) => const ProductCardSkeleton(),
                 ),
-                itemCount: 6,
-                itemBuilder: (_, __) => const ProductCardSkeleton(),
+              );
+            }
+
+            final all = snapshot.data!.docs
+                .map((d) => PublicProductModel.fromProductDoc(
+                      d.id,
+                      d.data() as Map<String, dynamic>,
+                    ))
+                .whereType<PublicProductModel>()
+                .toList();
+            final searching = _query.isNotEmpty;
+            // Search: client-side filter over the bounded snapshot (unchanged).
+            // Default browsing: the cursor-paginated list built by _loadNextPage.
+            final gridProducts = searching
+                ? all
+                    .where((p) =>
+                        p.name.toLowerCase().contains(_query.toLowerCase()))
+                    .toList()
+                : _gridItems;
+            final featured =
+                all.where((p) => p.isFeatured && p.isAvailable).toList();
+            final offers =
+                all.where((p) => p.isOnSale && p.isAvailable).toList();
+            // One entry per category, with a product count and the first
+            // product's image (used as the category card cover).
+            final categoryCounts = <String, int>{};
+            final categoryImage = <String, String>{};
+            for (final p in all) {
+              categoryCounts[p.category] =
+                  (categoryCounts[p.category] ?? 0) + 1;
+              categoryImage.putIfAbsent(p.category, () => p.coverImage);
+            }
+            final categories = categoryCounts.keys.toList()..sort();
+
+            if (all.isEmpty) {
+              return const Center(child: Text('لا توجد منتجات متاحة حاليًا'));
+            }
+
+            return ResponsiveCenter(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = Responsive.gridColumns(constraints.maxWidth);
+                  return CustomScrollView(
+                    controller: _scrollCtrl,
+                    slivers: [
+                      // Cart-wide quantity-discount promo. Self-hiding: renders
+                      // nothing when no tiers are configured (no gap, no flicker).
+                      const SliverToBoxAdapter(child: CartDiscountBanner()),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          child: TextField(
+                            controller: _searchCtrl,
+                            onChanged: (v) => setState(() => _query = v),
+                            onSubmitted: (_) =>
+                                FocusManager.instance.primaryFocus?.unfocus(),
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              hintText: 'ابحث عن منتج...',
+                              hintStyle: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant
+                                    // ignore: deprecated_member_use
+                                    .withOpacity(0.7),
+                                fontSize: 14,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              // زر الإلغاء/المسح يظهر فقط عند كتابة نص
+                              suffixIcon: _query.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded,
+                                          size: 20),
+                                      onPressed: () {
+                                        _searchCtrl.clear();
+                                        setState(() => _query = '');
+                                      },
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: Theme.of(context).colorScheme.surface,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 14),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide(
+                                  color: AppColors.border.withOpacity(0.6),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (featured.isNotEmpty && _query.isEmpty)
+                        SliverToBoxAdapter(
+                            child: _HeroBanner(products: featured)),
+                      if (offers.isNotEmpty && _query.isEmpty) ...[
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsetsDirectional.fromSTEB(
+                                16, 24, 8, 12),
+                            child: Row(
+                              children: [
+                                Text('الخصومات',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
+                                const Spacer(),
+                                TextButton(
+                                  onPressed: () => context.go('/offers'),
+                                  child: const Text('عرض الكل'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: 220,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: offers.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 12),
+                              itemBuilder: (context, i) => SizedBox(
+                                  width: 150,
+                                  child: ProductCard(product: offers[i])),
+                            ),
+                          ),
+                        ),
+                      ],
+                      // Category cards, just above the full product grid. Capped
+                      // at 3 rows with a "show all" toggle so the list never
+                      // dominates the page.
+                      if (_query.isEmpty && categories.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                            child: _CategoryCardsSection(
+                              categories: categories,
+                              counts: categoryCounts,
+                              images: categoryImage,
+                            ),
+                          ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                          child: Text(
+                            _query.isEmpty ? 'كل المنتجات' : 'نتائج البحث',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                      ),
+                      if (searching && gridProducts.isEmpty)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(child: Text('ما لقينا نتائج مطابقة')),
+                          ),
+                        )
+                      else if (!searching &&
+                          gridProducts.isEmpty &&
+                          !_isLoadingMore &&
+                          _loadError == null)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(
+                                child: Text('لا توجد منتجات متاحة حاليًا')),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          sliver: SliverGrid(
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: columns,
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 16,
+                              childAspectRatio: 0.68,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, i) =>
+                                  ProductCard(product: gridProducts[i]),
+                              childCount: gridProducts.length,
+                            ),
+                          ),
+                        ),
+                      // Trailing state below the grid: a failed fetch shows the
+                      // error + retry (never just silently stops); otherwise the
+                      // next-page spinner while a fetch is in flight; nothing once
+                      // _hasMore is false.
+                      if (_loadError != null)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 24),
+                            child: Column(
+                              children: [
+                                Text(
+                                  _loadError!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant),
+                                ),
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    setState(() => _loadError = null);
+                                    _loadNextPage();
+                                  },
+                                  icon: const Icon(Icons.refresh, size: 18),
+                                  label: const Text('إعادة المحاولة'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else if (_isLoadingMore)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                        ),
+                      const SliverToBoxAdapter(child: StoreFooter()),
+                    ],
+                  );
+                },
               ),
             );
-          }
-
-          final all = snapshot.data!.docs
-              .map((d) => PublicProductModel.fromProductDoc(
-                    d.id,
-                    d.data() as Map<String, dynamic>,
-                  ))
-              .whereType<PublicProductModel>()
-              .toList();
-          final searching = _query.isNotEmpty;
-          // Search: client-side filter over the bounded snapshot (unchanged).
-          // Default browsing: the cursor-paginated list built by _loadNextPage.
-          final gridProducts = searching
-              ? all
-                  .where((p) =>
-                      p.name.toLowerCase().contains(_query.toLowerCase()))
-                  .toList()
-              : _gridItems;
-          final featured =
-              all.where((p) => p.isFeatured && p.isAvailable).toList();
-          final offers = all.where((p) => p.isOnSale && p.isAvailable).toList();
-          // One entry per category, with a product count and the first
-          // product's image (used as the category card cover).
-          final categoryCounts = <String, int>{};
-          final categoryImage = <String, String>{};
-          for (final p in all) {
-            categoryCounts[p.category] = (categoryCounts[p.category] ?? 0) + 1;
-            categoryImage.putIfAbsent(p.category, () => p.coverImage);
-          }
-          final categories = categoryCounts.keys.toList()..sort();
-
-          if (all.isEmpty) {
-            return const Center(child: Text('لا توجد منتجات متاحة حاليًا'));
-          }
-
-          return ResponsiveCenter(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = Responsive.gridColumns(constraints.maxWidth);
-                return CustomScrollView(
-                  controller: _scrollCtrl,
-                  slivers: [
-                    // Cart-wide quantity-discount promo. Self-hiding: renders
-                    // nothing when no tiers are configured (no gap, no flicker).
-                    const SliverToBoxAdapter(child: CartDiscountBanner()),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: TextField(
-                          controller: _searchCtrl,
-                          onChanged: (v) => setState(() => _query = v),
-                          textInputAction: TextInputAction.search,
-                          decoration: InputDecoration(
-                            hintText: 'ابحث عن منتج...',
-                            hintStyle: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant
-                                  // ignore: deprecated_member_use
-                                  .withOpacity(0.7),
-                              fontSize: 14,
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            // زر الإلغاء/المسح يظهر فقط عند كتابة نص
-                            suffixIcon: _query.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear_rounded,
-                                        size: 20),
-                                    onPressed: () {
-                                      _searchCtrl.clear();
-                                      setState(() => _query = '');
-                                    },
-                                  )
-                                : null,
-                            filled: true,
-                            fillColor: Theme.of(context).colorScheme.surface,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(
-                                color: AppColors.border.withOpacity(0.6),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 1.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (featured.isNotEmpty && _query.isEmpty)
-                      SliverToBoxAdapter(
-                          child: _HeroBanner(products: featured)),
-                    if (offers.isNotEmpty && _query.isEmpty) ...[
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsetsDirectional.fromSTEB(
-                              16, 24, 8, 12),
-                          child: Row(
-                            children: [
-                              Text('عروض خاصة',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
-                              const Spacer(),
-                              TextButton(
-                                onPressed: () => context.go('/offers'),
-                                child: const Text('عرض الكل'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: 220,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: offers.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: 12),
-                            itemBuilder: (context, i) => SizedBox(
-                                width: 150,
-                                child: ProductCard(product: offers[i])),
-                          ),
-                        ),
-                      ),
-                    ],
-                    // Category cards, just above the full product grid. Capped
-                    // at 3 rows with a "show all" toggle so the list never
-                    // dominates the page.
-                    if (_query.isEmpty && categories.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                          child: _CategoryCardsSection(
-                            categories: categories,
-                            counts: categoryCounts,
-                            images: categoryImage,
-                          ),
-                        ),
-                      ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-                        child: Text(
-                          _query.isEmpty ? 'كل المنتجات' : 'نتائج البحث',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                    ),
-                    if (searching && gridProducts.isEmpty)
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Center(child: Text('ما لقينا نتائج مطابقة')),
-                        ),
-                      )
-                    else if (!searching &&
-                        gridProducts.isEmpty &&
-                        !_isLoadingMore &&
-                        _loadError == null)
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Center(
-                              child: Text('لا توجد منتجات متاحة حاليًا')),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                        sliver: SliverGrid(
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: columns,
-                            mainAxisSpacing: 16,
-                            crossAxisSpacing: 16,
-                            childAspectRatio: 0.68,
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, i) =>
-                                ProductCard(product: gridProducts[i]),
-                            childCount: gridProducts.length,
-                          ),
-                        ),
-                      ),
-                    // Trailing state below the grid: a failed fetch shows the
-                    // error + retry (never just silently stops); otherwise the
-                    // next-page spinner while a fetch is in flight; nothing once
-                    // _hasMore is false.
-                    if (_loadError != null)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 24),
-                          child: Column(
-                            children: [
-                              Text(
-                                _loadError!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant),
-                              ),
-                              const SizedBox(height: 12),
-                              OutlinedButton.icon(
-                                onPressed: () {
-                                  setState(() => _loadError = null);
-                                  _loadNextPage();
-                                },
-                                icon: const Icon(Icons.refresh, size: 18),
-                                label: const Text('إعادة المحاولة'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else if (_isLoadingMore)
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                      ),
-                    const SliverToBoxAdapter(child: StoreFooter()),
-                  ],
-                );
-              },
-            ),
-          );
-        },
+          },
+        ),
       ),
       // bottomSheet: const CartBar(),
     );
@@ -616,7 +627,8 @@ class _HeroBannerState extends State<_HeroBanner> {
               setState(() => _currentPage = i);
               _restartTimer();
             },
-            itemBuilder: (context, i) => _HeroSlide(product: widget.products[i]),
+            itemBuilder: (context, i) =>
+                _HeroSlide(product: widget.products[i]),
           ),
           if (widget.products.length > 1)
             Positioned(
@@ -633,8 +645,8 @@ class _HeroBannerState extends State<_HeroBanner> {
                       width: i == _currentPage ? 20 : 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(
-                            alpha: i == _currentPage ? 1 : 0.5),
+                        color: Colors.white
+                            .withValues(alpha: i == _currentPage ? 1 : 0.5),
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),
@@ -698,8 +710,8 @@ class _HeroSlide extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10)),

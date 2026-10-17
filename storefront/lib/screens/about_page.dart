@@ -61,16 +61,6 @@ class AboutPage extends StatelessWidget {
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 12),
-                        Chip(
-                          label: const Text('جلد طبيعي 100%'),
-                          avatar: const Icon(Icons.verified, size: 18),
-                          backgroundColor: theme.colorScheme.primary,
-                          labelStyle: TextStyle(
-                            color: theme.colorScheme.onPrimary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                         const SizedBox(height: 20),
                         Text(
                           aboutText,

@@ -5,6 +5,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
 import '../analytics.dart';
 import '../cart/cart_controller.dart';
+import '../config/jordan_governorates.dart';
 import '../data/cart_discount_repository.dart';
 import '../models/cart_discount.dart';
 import '../utils/arabic_digits.dart';
@@ -25,7 +26,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _cityCtrl = TextEditingController();
+  String? _city;
   final _areaCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
   bool _submitting = false;
@@ -69,7 +70,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _cityCtrl.dispose();
     _areaCtrl.dispose();
     _streetCtrl.dispose();
     super.dispose();
@@ -84,7 +84,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       await callable.call({
         'customerName': _nameCtrl.text.trim(),
         'customerPhone': jordanPhoneToE164(_phoneCtrl.text),
-        'address': _cityCtrl.text.trim(),
+        'address': _city!,
         'area': _areaCtrl.text.trim(),
         'street': _streetCtrl.text.trim(),
         'items': _items
@@ -372,18 +372,29 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 children: [
                   Expanded(
                     flex: isWide ? 1 : 0,
-                    child: TextFormField(
-                      controller: _cityCtrl,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _city,
+                      isExpanded: true,
+                      menuMaxHeight: 300,
                       autovalidateMode: AutovalidateMode.onUserInteraction,
+                      hint: const Text('اختر المحافظة'),
                       decoration: InputDecoration(
-                        labelText: 'المدينة',
+                        labelText: 'المحافظة / المدينة',
                         prefixIcon: const Icon(Icons.location_city_outlined),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
+                      items: [
+                        for (final g in kJordanGovernorates)
+                          DropdownMenuItem(value: g, child: Text(g)),
+                      ],
+                      // Dismiss the keyboard before the menu opens so it
+                      // isn't squeezed/covered on mobile web.
+                      onTap: () => FocusScope.of(context).unfocus(),
+                      onChanged: (v) => setState(() => _city = v),
                       validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+                          v == null ? 'الرجاء اختيار المحافظة' : null,
                     ),
                   ),
                   SizedBox(
@@ -518,36 +529,42 @@ class _CheckoutPageState extends State<CheckoutPage> {
         title: const Text('إتمام الطلب'),
         centerTitle: true,
       ),
-      body: ResponsiveCenter(
-        maxWidth: 1000,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              if (isDesktop) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      // Tapping outside a field closes the keyboard; inner taps still win.
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ResponsiveCenter(
+          maxWidth: 1000,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(24),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (isDesktop) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: _buildForm(context),
+                      ),
+                      const SizedBox(width: 32),
+                      Expanded(
+                        flex: 2,
+                        child: StickySummary(child: _buildSummary(context)),
+                      ),
+                    ],
+                  );
+                }
+                return Column(
                   children: [
-                    Expanded(
-                      flex: 3,
-                      child: _buildForm(context),
-                    ),
-                    const SizedBox(width: 32),
-                    Expanded(
-                      flex: 2,
-                      child: StickySummary(child: _buildSummary(context)),
-                    ),
+                    _buildSummary(context),
+                    const SizedBox(height: 32),
+                    _buildForm(context),
                   ],
                 );
-              }
-              return Column(
-                children: [
-                  _buildSummary(context),
-                  const SizedBox(height: 32),
-                  _buildForm(context),
-                ],
-              );
-            },
+              },
+            ),
           ),
         ),
       ),

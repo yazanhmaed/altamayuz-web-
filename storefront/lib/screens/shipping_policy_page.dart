@@ -100,6 +100,11 @@ class ShippingPolicyPage extends StatelessWidget {
                   body: exchangeText,
                 ),
               ],
+              const _PolicySection(
+                icon: Icons.restore_sharp,
+                title: 'الارجاع',
+                body: 'في حال الإرجاع، يتم دفع بدل توصيل (دينارين فقط)',
+              ),
             ],
           ),
         ),

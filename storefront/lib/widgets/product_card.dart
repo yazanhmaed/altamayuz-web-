@@ -67,40 +67,10 @@ class ProductCard extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 5, 12, 8),
-                child: Row(
-                  children: [
-                    // In a ~2-column grid cell at 320px the content box is only
-                    // ~110px wide; a discounted PriceDisplay (two figures) plus
-                    // the dots would otherwise RenderFlex-overflow. Let the price
-                    // take the free space and scale down only if it must.
-                    Expanded(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: AlignmentDirectional.centerStart,
-                        child: PriceDisplay(product: product),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ...product.variants.take(3).map(
-                          (v) => Padding(
-                            padding: const EdgeInsets.only(right: 3),
-                            child: Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: AppColors.border,
-                                border: Border.all(color: AppColors.border),
-                              ),
-                              // 12px dot — no need to decode above ~48px.
-                              child: ClipOval(
-                                child:
-                                    StoreImage(url: v.imageUrl, cacheWidth: 48),
-                              ),
-                            ),
-                          ),
-                        ),
-                  ],
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: PriceDisplay(product: product),
                 ),
               ),
             ],

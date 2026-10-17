@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +20,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     context.read<DashboardCubit>().loadDashboard();
   }
 
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تسجيل الخروج'),
+        content: const Text('هل تريد تسجيل الخروج؟'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('إلغاء')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('تسجيل الخروج')),
+        ],
+      ),
+    );
+    // The auth gate in main.dart reacts to the sign-out and tears down the
+    // signed-in app (cubits included), so no navigation is needed here.
+    if (confirmed == true) await FirebaseAuth.instance.signOut();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -28,6 +50,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('الرئيسية'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'تسجيل الخروج',
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: _confirmSignOut,
+          ),
+        ],
       ),
       body: BlocBuilder<DashboardCubit, DashboardState>(
         builder: (context, state) {
@@ -104,7 +133,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         physics: const NeverScrollableScrollPhysics(),
                         mainAxisSpacing: 14,
                         crossAxisSpacing: 14,
-                        childAspectRatio: isDesktop ? 1.8 : 1.3,
+                        childAspectRatio: isDesktop ? 1.8 : 1,
                         children: [
                           _MetricCard(
                             icon: Icons.receipt_long_rounded,
@@ -164,7 +193,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
                                   color: data.lowStockEntries.isEmpty
-                                      ? theme.colorScheme.surfaceVariant
+                                      ? theme
+                                          .colorScheme.surfaceContainerHighest
                                       : Colors.orange.shade100,
                                   shape: BoxShape.circle,
                                 ),
@@ -184,8 +214,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   children: [
                                     Text(
                                       'حالة المخزون',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                     const SizedBox(height: 2),
@@ -289,7 +321,8 @@ class _DateRangeRow extends StatelessWidget {
     );
     if (picked == null) return;
     // Symmetric guard: never let "إلى" land before "من".
-    final from = picked.isBefore(cubit.currentFrom) ? picked : cubit.currentFrom;
+    final from =
+        picked.isBefore(cubit.currentFrom) ? picked : cubit.currentFrom;
     cubit.loadDashboard(from: from, to: picked);
   }
 
@@ -420,7 +453,8 @@ class _SourceDistribution extends StatelessWidget {
     final storefrontFraction = data.storefrontOrderCount / total;
     final theme = Theme.of(context);
 
-    Widget bar(String label, int count, double fraction, Color color, IconData icon) {
+    Widget bar(
+        String label, int count, double fraction, Color color, IconData icon) {
       final percent = (fraction * 100).round();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -4,6 +4,7 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="منتجات تركية عالية الجودة بصناعة مصرية فاخرة">
 
@@ -19,7 +20,8 @@
   <link rel="manifest" href="manifest.json">
 
   <style>
-    html, body { background-color: #F6F3EC; height: 100%; }
+    html, body { background-color: #F6F3EC; height: 100%; width: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
+    @supports (height: 100dvh) { body { height: 100dvh; } }
   </style>
 </head>
 <body>
@@ -69,6 +71,43 @@
       window.addEventListener('flutter-first-frame', removeSplash, { once: true });
       // Defensive fallback in case the event above never fires.
       setTimeout(removeSplash, 15000);
+    })();
+  </script>
+  <script>
+    // Mobile keyboard: undo the leftover blank space/scroll offset browsers
+    // keep after the keyboard closes, and make Flutter re-read its metrics.
+    (function () {
+      var VP = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content';
+      function isInput(el) {
+        return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      }
+      function resetScroll() {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+      }
+      document.addEventListener('focusout', function (e) {
+        if (!isInput(e.target)) return;
+        setTimeout(function () {
+          if (!isInput(document.activeElement)) resetScroll();
+        }, 100);
+      });
+      var vv = window.visualViewport, keyboardOpen = false;
+      if (vv) {
+        vv.addEventListener('resize', function () {
+          var closed = Math.abs(window.innerHeight - vv.height) < 50;
+          if (closed && keyboardOpen) {
+            resetScroll();
+            window.dispatchEvent(new Event('resize'));
+          }
+          keyboardOpen = !closed;
+        });
+      }
+      // Flutter's engine replaces any viewport meta with its own on startup,
+      // dropping interactive-widget — re-apply ours once it has run.
+      window.addEventListener('flutter-first-frame', function () {
+        var m = document.querySelector('meta[name="viewport"]');
+        if (m) m.setAttribute('content', VP);
+      }, { once: true });
     })();
   </script>
   <script src="flutter_bootstrap.js" async></script>

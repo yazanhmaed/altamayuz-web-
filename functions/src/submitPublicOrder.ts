@@ -77,12 +77,33 @@ function computeCartDiscount(
 // before dispatch, so client tampering is caught manually. Server-side price
 // derivation and the per-phone rate limit below are kept — they cost nothing
 // operationally.
+// Must match kJordanGovernorates in storefront/ and admin_app/
+// lib/config/jordan_governorates.dart exactly. Only public orders are checked;
+// the admin app writes to Firestore directly and old orders are untouched.
+const JORDAN_GOVERNORATES = new Set([
+  "عمّان",
+  "إربد",
+  "الزرقاء",
+  "البلقاء",
+  "مأدبا",
+  "الكرك",
+  "الطفيلة",
+  "معان",
+  "العقبة",
+  "جرش",
+  "عجلون",
+  "المفرق",
+]);
+
 export const submitPublicOrder = onCall<RequestData>(async (request) => {
   const { customerName, customerPhone, address, area, street, items } =
     request.data;
 
   if (!customerName || !customerPhone || !address || !area || !items?.length) {
     throw new HttpsError("invalid-argument", "بيانات الطلب ناقصة.");
+  }
+  if (!JORDAN_GOVERNORATES.has(address)) {
+    throw new HttpsError("invalid-argument", "المحافظة غير صحيحة");
   }
   for (const it of items) {
     if (!it.productId || !it.color || !it.size || it.quantity <= 0) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../cart/cart_controller.dart';
 import '../data/cart_discount_repository.dart';
@@ -6,6 +7,170 @@ import '../models/cart_discount.dart';
 import '../theme/app_theme.dart';
 
 import 'ui_helpers.dart';
+
+/// Asks before removing [line] from the cart; removes it only on "حذف".
+/// Shared by every path that would drop a line (e.g. "−" at quantity 1).
+/// The dialog goes on the root navigator, so "إلغاء"/barrier-tap closes only
+/// the dialog and leaves the cart sheet open.
+Future<void> confirmRemoveCartItem(BuildContext context, CartLine line) async {
+  final details = [line.variant.color, line.size]
+      .where((s) => s.trim().isNotEmpty)
+      .join(' - ');
+
+  final productName = line.product.name;
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    useRootNavigator: true,
+    barrierDismissible: true,
+    builder: (dialogContext) {
+      final theme = Theme.of(dialogContext);
+      final errorColor = theme.colorScheme.error;
+
+      return Directionality(
+        textDirection: TextDirection.rtl,
+        child: Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          elevation: 6,
+          backgroundColor: theme.scaffoldBackgroundColor,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // أيقونة الحذف الملونة
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: errorColor.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: errorColor,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // العنوان
+                const Text(
+                  'حذف المنتج',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                const Text(
+                  'هل أنت تأكد من رغبتك في حذف هذا المنتج من السلة؟',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // بطاقة تفاصيل المنتج المعني بالحذف
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        productName,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (details.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          details,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // الأزرار التفاعلية
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: Text(
+                          'إلغاء',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          elevation: 0,
+                          backgroundColor: errorColor,
+                          foregroundColor: theme.colorScheme.onError,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const Text(
+                          'حذف',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  if (confirmed != true) return;
+  HapticFeedback.lightImpact();
+  cartController.remove(line.key);
+}
 
 class CartSheet extends StatelessWidget {
   const CartSheet({super.key});
@@ -296,8 +461,10 @@ class _CartContentState extends State<CartContent> {
                                     ),
                                   ),
                                   InkWell(
-                                    onTap: () => cartController.updateQuantity(
-                                        line.key, line.quantity - 1),
+                                    onTap: () => line.quantity <= 1
+                                        ? confirmRemoveCartItem(context, line)
+                                        : cartController.updateQuantity(
+                                            line.key, line.quantity - 1),
                                     child: const Padding(
                                       padding: EdgeInsets.all(8),
                                       child: Icon(Icons.remove, size: 16),
@@ -342,8 +509,8 @@ class _CartContentState extends State<CartContent> {
                             ),
                             Text(
                               '-${_discount.amount.toStringAsFixed(2)} د.أ',
-                              style: const TextStyle(
-                                color: Colors.green,
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),

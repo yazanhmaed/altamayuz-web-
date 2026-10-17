@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../config/jordan_governorates.dart';
 import '../../cubit/inventory/inventory_cubit.dart';
 import '../../cubit/order/order_cubit.dart';
 import '../../cubit/order/order_state.dart';
@@ -126,11 +127,34 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                 ),
                 const SizedBox(height: 12),
                 Labeled(
-                  label: 'المدينة',
-                  child: TextFormField(
-                    controller: cubit.addressCtrl,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                  ),
+                  label: 'المحافظة / المدينة',
+                  child: Builder(builder: (context) {
+                    final current = cubit.addressCtrl.text;
+                    // Orders saved before the dropdown may hold free-text
+                    // cities; keep that value selectable so editing them
+                    // doesn't crash or silently drop the city.
+                    final options = [
+                      ...kJordanGovernorates,
+                      if (current.isNotEmpty && !kJordanGovernorates.contains(current))
+                        current,
+                    ];
+                    return DropdownButtonFormField<String>(
+                      key: ValueKey(cubit.editingOrder),
+                      initialValue: current.isEmpty ? null : current,
+                      isExpanded: true,
+                      menuMaxHeight: 300,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      hint: const Text('اختر المحافظة'),
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: [
+                        for (final g in options)
+                          DropdownMenuItem(value: g, child: Text(g)),
+                      ],
+                      onTap: () => FocusScope.of(context).unfocus(),
+                      onChanged: (v) => cubit.addressCtrl.text = v ?? '',
+                      validator: (v) => v == null ? 'الرجاء اختيار المحافظة' : null,
+                    );
+                  }),
                 ),
                 const SizedBox(height: 12),
                 Labeled(

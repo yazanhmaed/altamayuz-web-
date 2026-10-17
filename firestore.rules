@@ -4,7 +4,7 @@ service cloud.firestore {
 
     // Replace with the Firebase Auth UID of the store owner (admin_app login).
     function isOwner() {
-      return request.auth != null && request.auth.uid == "YOUR_ADMIN_UID";
+      return request.auth != null && request.auth.uid == "COg18UgDwebX2XJNDhezTG7GCzb2";
     }
 
     // The storefront reads products directly. Anyone may read; only the owner

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -11,6 +12,7 @@ import 'cubit/dashboard/dashboard_cubit.dart';
 import 'cubit/inventory/inventory_cubit.dart';
 import 'cubit/order/order_cubit.dart';
 import 'firebase_options.dart';
+import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
 
 Future<void> registerOwnerToken() async {
@@ -37,12 +39,53 @@ Future<void> main() async {
   // Required once before any `DateFormat(..., 'ar')` call (e.g. order_card.dart's
   // creation-date display) — intl throws a LocaleDataException otherwise.
   await initializeDateFormatting('ar');
-  await registerOwnerToken();
   runApp(const AdminApp());
 }
 
+/// Auth gate. Each branch builds its own [MaterialApp] (via [_buildApp]) so
+/// the cubit providers can sit above the Navigator — pushed routes like
+/// AddProductScreen read them — while still being created only once a user
+/// is signed in. Signing out swaps the whole signed-in subtree away, which
+/// closes the cubits (dropping cached orders/products) and any pushed routes.
 class AdminApp extends StatelessWidget {
   const AdminApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildApp(
+            home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+          );
+        }
+        final user = snapshot.data;
+        if (user == null) {
+          return _buildApp(home: const LoginScreen());
+        }
+        return _SignedInApp(key: ValueKey(user.uid));
+      },
+    );
+  }
+}
+
+/// Created fresh on every sign-in (keyed by uid in [AdminApp]), so the
+/// owner's FCM token is registered once per session — now with an
+/// authenticated user, which the owner-only `settings` rule requires.
+class _SignedInApp extends StatefulWidget {
+  const _SignedInApp({super.key});
+
+  @override
+  State<_SignedInApp> createState() => _SignedInAppState();
+}
+
+class _SignedInAppState extends State<_SignedInApp> {
+  @override
+  void initState() {
+    super.initState();
+    registerOwnerToken();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,23 +95,27 @@ class AdminApp extends StatelessWidget {
         BlocProvider(create: (_) => OrderCubit()),
         BlocProvider(create: (_) => DashboardCubit()),
       ],
-      child: MaterialApp(
-        title: 'إدارة المتجر',
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('ar'),
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [Locale('ar')],
-        theme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: const Color(0xFF1F3A3D),
-          fontFamily: 'Tajawal',
-        ),
-        home: const HomeScreen(),
-      ),
+      child: _buildApp(home: const HomeScreen()),
     );
   }
+}
+
+Widget _buildApp({required Widget home}) {
+  return MaterialApp(
+    title: 'إدارة المتجر',
+    debugShowCheckedModeBanner: false,
+    locale: const Locale('ar'),
+    localizationsDelegates: const [
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: const [Locale('ar')],
+    theme: ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: const Color(0xFF1F3A3D),
+      fontFamily: 'Tajawal',
+    ),
+    home: home,
+  );
 }

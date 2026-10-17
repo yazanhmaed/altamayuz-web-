@@ -20,28 +20,45 @@ Future<void> main() async {
   // available stand-in for crash reporting on this platform.
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
-    analytics.logEvent(
-      name: 'app_exception',
-      parameters: {
-        'error': details.exceptionAsString(),
-        'stack': details.stack.toString(),
-      },
-    );
+    _reportError(details.exception);
   };
   PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-    analytics.logEvent(
-      name: 'app_exception',
-      parameters: {
-        'error': error.toString(),
-        'stack': stack.toString(),
-      },
-    );
+    _reportError(error);
     return true;
   };
 
   runApp(const StorefrontApp());
-  
+}
 
+/// Guards against the reporter re-entering itself if logging throws.
+bool _reportingError = false;
+
+/// Logs an uncaught error as `client_error` (`app_exception` is reserved by
+/// Firebase Analytics and is rejected). Param values are capped at 100 chars,
+/// the Analytics limit. Never throws.
+void _reportError(Object error) {
+  if (_reportingError) return;
+  _reportingError = true;
+  try {
+    String cap(String s) => s.length > 100 ? s.substring(0, 100) : s;
+    String screen = '';
+    try {
+      screen = appRouter.routerDelegate.currentConfiguration.uri.path;
+    } catch (_) {}
+    analytics
+        .logEvent(
+          name: 'client_error',
+          parameters: {
+            'message': cap(error.toString()),
+            'type': cap(error.runtimeType.toString()),
+            'screen': cap(screen),
+          },
+        )
+        .catchError((_) {});
+  } catch (_) {
+  } finally {
+    _reportingError = false;
+  }
 }
 
 /// App-wide scroll feel. Guarantees touch-drag scrolling is enabled on web
