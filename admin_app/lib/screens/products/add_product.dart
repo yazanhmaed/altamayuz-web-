@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -313,7 +314,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   borderRadius: BorderRadius.circular(8),
                                   image: pendingImage != null
                                       ? DecorationImage(
-                                          image: FileImage(File(pendingImage.path)),
+                                          // On web the picked XFile's path is a blob: URL;
+                                          // dart:io File doesn't exist there.
+                                          image: kIsWeb
+                                              ? NetworkImage(pendingImage.path)
+                                              : FileImage(File(pendingImage.path)),
                                           fit: BoxFit.cover,
                                         )
                                       : existingImageUrl != null

@@ -4,6 +4,12 @@ import 'package:flutter/material.dart';
 /// Sign-in for the single owner account (pre-created in the Firebase
 /// Console). No sign-up or password reset — the auth gate in main.dart
 /// swaps this screen out as soon as `authStateChanges()` reports a user.
+String? _pendingNotice;
+
+/// Shows [message] as the error on the next [LoginScreen] built — used when
+/// the auth gate signs a non-owner account back out.
+void setLoginNotice(String message) => _pendingNotice = message;
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -17,6 +23,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isSigningIn = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _error = _pendingNotice;
+    _pendingNotice = null;
+  }
 
   @override
   void dispose() {

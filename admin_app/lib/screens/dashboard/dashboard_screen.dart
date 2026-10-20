@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,6 +7,8 @@ import 'package:intl/intl.dart';
 
 import '../../cubit/dashboard/dashboard_cubit.dart';
 import '../../cubit/dashboard/dashboard_state.dart';
+import '../../utils/arabic_search.dart';
+import 'quick_restock_dialog.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -508,9 +512,49 @@ class _SourceDistribution extends StatelessWidget {
   }
 }
 
-class _LowStockDetailScreen extends StatelessWidget {
+class _LowStockDetailScreen extends StatefulWidget {
   final List<LowStockEntry> entries;
   const _LowStockDetailScreen({required this.entries});
+
+  @override
+  State<_LowStockDetailScreen> createState() => _LowStockDetailScreenState();
+}
+
+class _LowStockDetailScreenState extends State<_LowStockDetailScreen> {
+  final _searchCtrl = TextEditingController();
+  Timer? _debounce;
+
+  /// Debounced, applied query — kept here (not in the cubit) so it survives
+  /// dashboard reloads and restocks for as long as this screen is open.
+  String _query = '';
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (mounted && value != _query) setState(() => _query = value);
+    });
+  }
+
+  void _clearSearch() {
+    _debounce?.cancel();
+    _searchCtrl.clear();
+    setState(() => _query = '');
+  }
+
+  List<LowStockEntry> _filtered(List<LowStockEntry> all) => _query
+          .trim()
+          .isEmpty
+      ? all
+      : all
+          .where((e) => matchesSearch(_query, [e.productName, e.color, e.size]))
+          .toList();
 
   @override
   Widget build(BuildContext context) {
@@ -521,56 +565,184 @@ class _LowStockDetailScreen extends StatelessWidget {
         title: const Text('نقص المخزون'),
         centerTitle: true,
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: entries.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (context, i) {
-          final e = entries[i];
-          return Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: theme.colorScheme.outlineVariant.withOpacity(0.5),
-              ),
-            ),
-            child: ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: CircleAvatar(
-                backgroundColor: Colors.red.shade50,
-                child: Icon(Icons.warning_amber_rounded,
-                    color: Colors.red.shade700),
-              ),
-              title: Text(
-                e.productName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                'اللون: ${e.color}  |  المقاس: ${e.size}',
-                style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-              ),
-              trailing: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: _onSearchChanged,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => FocusScope.of(context).unfocus(),
+              decoration: InputDecoration(
+                hintText: 'ابحث باسم المنتج أو اللون أو المقاس',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchCtrl,
+                  builder: (_, value, __) => value.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          tooltip: 'مسح البحث',
+                          icon: const Icon(Icons.close),
+                          onPressed: _clearSearch,
+                        ),
                 ),
-                child: Text(
-                  'المتبقي: ${e.quantity}',
-                  style: TextStyle(
-                    color: Colors.red.shade800,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
-          );
-        },
+          ),
+          Expanded(
+            // Reads the live list so a quick restock updates/removes its row;
+            // falls back to the entries it was opened with while reloading.
+            child: BlocBuilder<DashboardCubit, DashboardState>(
+              builder: (context, state) {
+                final all = state is DashboardLoaded
+                    ? state.data.lowStockEntries
+                    : widget.entries;
+                if (all.isEmpty) {
+                  return const Center(
+                      child: Text('المخزون ممتاز، لا يوجد نقص'));
+                }
+                final entries = _filtered(all);
+                final isFiltering = _query.trim().isNotEmpty;
+                if (entries.isEmpty) {
+                  return _NoSearchResults(
+                    query: _query.trim(),
+                    onClear: _clearSearch,
+                  );
+                }
+                return Column(
+                  children: [
+                    if (isFiltering)
+                      Padding(
+                        padding:
+                            const EdgeInsetsDirectional.fromSTEB(20, 4, 20, 0),
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            '${entries.length} من ${all.length}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                        child: ListView.separated(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      itemCount: entries.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, i) {
+                        final e = entries[i];
+                        return Card(
+                          key: ValueKey('${e.productId}|${e.color}|${e.size}'),
+                          elevation: 0,
+                          clipBehavior: Clip.antiAlias,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: ListTile(
+                            minTileHeight: 56,
+                            onTap: () => showQuickRestockDialog(context, e),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.red.shade50,
+                              child: Icon(Icons.warning_amber_rounded,
+                                  color: Colors.red.shade700),
+                            ),
+                            title: Text(
+                              e.productName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Text(
+                              'اللون: ${e.color}  |  المقاس: ${e.size}',
+                              style: TextStyle(
+                                  color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'المتبقي: ${e.quantity}',
+                                    style: TextStyle(
+                                      color: Colors.red.shade800,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Icon(Icons.add_circle_outline,
+                                    size: 22, color: theme.colorScheme.primary),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    )),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
+class _NoSearchResults extends StatelessWidget {
+  final String query;
+  final VoidCallback onClear;
+  const _NoSearchResults({required this.query, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const SizedBox(height: 24),
+          Icon(Icons.search_off_rounded,
+              size: 48, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(height: 12),
+          Text(
+            'لا توجد نتائج لـ «$query»',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onClear,
+            icon: const Icon(Icons.close),
+            label: const Text('مسح البحث'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+// 2003511063@ajyal.jo
+// Razan@1234567

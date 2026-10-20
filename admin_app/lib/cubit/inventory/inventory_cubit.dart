@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -806,10 +807,16 @@ class InventoryCubit extends Cubit<InventoryState> {
         });
       }
 
-      final bytes = workbook.save();
-      if (bytes == null) throw Exception('فشل إنشاء الملف.');
-
       final fileName = 'products_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      // On web, the excel package's save() itself triggers the browser
+      // download (FilePicker.saveFile isn't implemented there).
+      final bytes = workbook.save(fileName: fileName);
+      if (bytes == null) throw Exception('فشل إنشاء الملف.');
+      if (kIsWeb) {
+        emit(InventorySuccess('تم تنزيل الملف: $fileName'));
+        return;
+      }
+
       final savedPath = await FilePicker.platform.saveFile(
         dialogTitle: 'حفظ ملف المنتجات',
         fileName: fileName,

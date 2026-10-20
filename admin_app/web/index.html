@@ -4,22 +4,33 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="robots" content="noindex, nofollow">
   <meta name="description" content="تطبيق إدارة المخزون والطلبات لمتجر التميز">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="التميز - إدارة">
+  <meta name="apple-mobile-web-app-title" content="إدارة التميز">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>التميز - إدارة</title>
+  <title>إدارة التميز</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <script>
+    // Flutter's engine replaces any viewport meta with its own on startup,
+    // dropping interactive-widget — re-apply ours once it has run (same as
+    // the storefront's index.html).
+    window.addEventListener('flutter-first-frame', function () {
+      var m = document.querySelector('meta[name="viewport"]');
+      if (m) m.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content');
+    }, { once: true });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

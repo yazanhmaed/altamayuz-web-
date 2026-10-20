@@ -4,9 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../cubit/inventory/inventory_cubit.dart';
 import '../../cubit/inventory/inventory_state.dart';
 import '../../data/product/product_model.dart';
+import '../../widgets/product_image.dart';
 import 'add_product.dart';
 import 'import_review_screen.dart';
-import 'restock_screen.dart';
+import 'product_details_sheet.dart';
 
 class ProductListScreen extends StatefulWidget {
   const ProductListScreen({super.key});
@@ -56,23 +57,60 @@ class _ProductListScreenState extends State<ProductListScreen> {
             );
           }
         },
+        // Form/row edits from the add-product and restock screens share this
+        // cubit; they don't affect the grid, so skip rebuilding for them
+        // (unless the grid is still showing the loading spinner).
+        buildWhen: (previous, current) =>
+            previous is InventoryLoading ||
+            (current is! InventoryFormChanged && current is! InventoryAddRow),
         builder: (context, state) {
           if (state is InventoryLoading) {
             return const Center(child: CircularProgressIndicator());
           }
-          final products = context.read<InventoryCubit>().products;
+          final cubit = context.read<InventoryCubit>();
+          final products = cubit.products;
+          if (products.isEmpty && state is InventoryError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 40, color: Colors.grey),
+                    const SizedBox(height: 8),
+                    const Text('تعذّر تحميل المنتجات'),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => cubit.fetchProducts(refresh: true),
+                      child: const Text('إعادة المحاولة'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           if (products.isEmpty) {
             return const Center(child: Text('لا توجد منتجات بعد'));
           }
           return RefreshIndicator(
-            onRefresh: () =>
-                context.read<InventoryCubit>().fetchProducts(refresh: true),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
+            onRefresh: () => cubit.fetchProducts(refresh: true),
+            child: GridView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200,
+                childAspectRatio: 0.8,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+              ),
               itemCount: products.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, index) =>
-                  _ProductTile(product: products[index]),
+              itemBuilder: (context, index) {
+                final product = products[index];
+                return _ProductCard(
+                  key: ValueKey(product.id),
+                  product: product,
+                );
+              },
             ),
           );
         },
@@ -88,155 +126,128 @@ class _ProductListScreenState extends State<ProductListScreen> {
   }
 }
 
-class _ProductTile extends StatelessWidget {
+class _ProductCard extends StatelessWidget {
   final ProductModel product;
-  const _ProductTile({required this.product});
+  const _ProductCard({super.key, required this.product});
 
   @override
   Widget build(BuildContext context) {
-    final isLowStock = product.totalQty <= product.lowStockThreshold;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final gallery = productGallery(product);
+    final isOutOfStock = product.totalQty <= 0;
+    final isLowStock = !isOutOfStock &&
+        product.stock.values
+            .expand((sizes) => sizes.values)
+            .any((qty) => qty <= product.lowStockThreshold);
+
     return Card(
-      child: ExpansionTile(
-        title: Text(product.name),
-        subtitle: Text(
-          '${product.price.toStringAsFixed(2)} — الكمية الكلية: ${product.totalQty}'
-          '${product.isFeatured ? ' — مميز' : ''}'
-          '${!product.isActive ? ' — غير فعّال' : ''}',
-          style: TextStyle(color: isLowStock ? Colors.red : null),
-        ),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        expandedCrossAxisAlignment: CrossAxisAlignment.start,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: InkWell(
+        onTap: () => showProductDetails(context, product.id),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            IconButton(
-              tooltip: 'إضافة كمية',
-              icon: const Icon(Icons.add_box_outlined),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => RestockScreen(product: product)),
-              ),
-            ),
-            IconButton(
-              tooltip: 'تعديل',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => AddProductScreen(product: product)),
-              ),
-            ),
-            IconButton(
-              tooltip: 'حذف',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('حذف المنتج'),
-                    content: Text('هل أنت متأكد من حذف "${product.name}"؟'),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('إلغاء')),
-                      TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('حذف')),
-                    ],
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ProductImage(
+                    url: gallery.isEmpty ? null : gallery.first.value,
                   ),
-                );
-                if (confirmed == true && context.mounted) {
-                  context.read<InventoryCubit>().deleteProduct(product.id);
-                }
-              },
+                  if (isOutOfStock || isLowStock)
+                    PositionedDirectional(
+                      top: 8,
+                      start: 8,
+                      child: _StockBadge(outOfStock: isOutOfStock),
+                    ),
+                  if (!product.isActive)
+                    const PositionedDirectional(
+                      top: 8,
+                      end: 8,
+                      child: _HiddenBadge(),
+                    ),
+                ],
+              ),
             ),
-            const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Icon(Icons.unfold_more, size: 18, color: Colors.grey),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w600, height: 1.3),
+              ),
             ),
           ],
         ),
-        children: [_StockBreakdown(product: product)],
       ),
     );
   }
 }
 
-class _StockBreakdown extends StatelessWidget {
-  final ProductModel product;
-  const _StockBreakdown({required this.product});
+/// Small corner cue: red "نفد" when nothing is left, otherwise an amber dot
+/// when some size is at or below the low-stock threshold.
+class _StockBadge extends StatelessWidget {
+  final bool outOfStock;
+  const _StockBadge({required this.outOfStock});
 
   @override
   Widget build(BuildContext context) {
-    if (product.colors.isEmpty) {
-      return const Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: Text(
-          'لا توجد ألوان مضافة لهذا المنتج',
-          style: TextStyle(color: Colors.grey, fontSize: 13),
+    if (!outOfStock) {
+      return Tooltip(
+        message: 'مخزون منخفض',
+        child: Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: Colors.amber.shade600,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+          ),
         ),
       );
     }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final color in product.colors) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 4),
-            child: Text(
-              color,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-          ),
-          if ((product.stock[color] ?? const {}).isEmpty)
-            const Text(
-              'لا توجد مقاسات لهذا اللون',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            )
-          else
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final entry in product.stock[color]!.entries)
-                  _StockChip(size: entry.key, qty: entry.value),
-              ],
-            ),
-        ],
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.red.shade600,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Text(
+        'نفد',
+        style: TextStyle(
+            color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+      ),
     );
   }
 }
 
-class _StockChip extends StatelessWidget {
-  final String size;
-  final int qty;
-  const _StockChip({required this.size, required this.qty});
+class _HiddenBadge extends StatelessWidget {
+  const _HiddenBadge();
 
   @override
   Widget build(BuildContext context) {
-    final Color background;
-    final Color foreground;
-    if (qty <= 0) {
-      background = Colors.red.shade100;
-      foreground = Colors.red.shade900;
-    } else if (qty == 1) {
-      background = Colors.amber.shade100;
-      foreground = Colors.amber.shade900;
-    } else {
-      background = Colors.green.shade100;
-      foreground = Colors.green.shade900;
-    }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.black45,
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(
-        '$size  :  $qty',
-        style: TextStyle(
-            color: foreground, fontSize: 12, fontWeight: FontWeight.w500),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.visibility_off_outlined, size: 12, color: Colors.white),
+          SizedBox(width: 3),
+          Text('مخفي', style: TextStyle(color: Colors.white, fontSize: 11)),
+        ],
       ),
     );
   }

@@ -23,19 +23,91 @@
       ]
     }
   ],
-  "hosting": {
-    "public": "storefront/build/web",
-    "ignore": [
-      "firebase.json",
-      "**/.*"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "store",
+      "public": "storefront/build/web",
+      "ignore": [
+        "firebase.json",
+        "**/.*"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "admin",
+      "public": "admin_app/build/web",
+      "ignore": [
+        "firebase.json",
+        "**/.*"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "Referrer-Policy",
+              "value": "no-referrer"
+            }
+          ]
+        },
+        {
+          "source": "**/*.@(woff2|ttf|otf|png|jpg|webp)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=604800"
+            }
+          ]
+        },
+        {
+          "source": "**/*.@(js|mjs|wasm|css|json)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/index.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "regex": "^/[^.]*$",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "emulators": {
     "functions": {
       "port": 5001

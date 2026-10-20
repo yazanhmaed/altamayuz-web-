@@ -11,6 +11,7 @@ class LowStockEntry {
   final String size;
   final int quantity;
   final int threshold;
+  final String? imageUrl; // the color's image, for a thumbnail
   LowStockEntry({
     required this.productId,
     required this.productName,
@@ -18,6 +19,7 @@ class LowStockEntry {
     required this.size,
     required this.quantity,
     required this.threshold,
+    this.imageUrl,
   });
 }
 
@@ -113,6 +115,7 @@ class DashboardCubit extends Cubit<DashboardState> {
         final data = doc.data();
         final threshold = (data['lowStockThreshold'] as num?)?.toInt() ?? 1;
         final stock = Map<String, dynamic>.from(data['stock'] as Map? ?? {});
+        final images = Map<String, dynamic>.from(data['imageUrls'] as Map? ?? {});
         stock.forEach((color, sizes) {
           Map<String, dynamic>.from(sizes as Map).forEach((size, qty) {
             final q = (qty as num).toInt();
@@ -124,6 +127,7 @@ class DashboardCubit extends Cubit<DashboardState> {
                 size: size,
                 quantity: q,
                 threshold: threshold,
+                imageUrl: images[color] as String?,
               ));
             }
           });
@@ -143,6 +147,46 @@ class DashboardCubit extends Cubit<DashboardState> {
     } catch (e) {
       emit(DashboardError(e.toString()));
     }
+  }
+
+  /// Applies a restock of one product/color/size to the loaded low-stock
+  /// list without refetching: the entry is updated to [newQuantity], or
+  /// dropped once it's above its product's threshold.
+  void applyRestock({
+    required String productId,
+    required String color,
+    required String size,
+    required int newQuantity,
+  }) {
+    final current = state;
+    if (current is! DashboardLoaded) return;
+    final data = current.data;
+    final entries = <LowStockEntry>[];
+    for (final e in data.lowStockEntries) {
+      if (e.productId != productId || e.color != color || e.size != size) {
+        entries.add(e);
+      } else if (newQuantity <= e.threshold) {
+        entries.add(LowStockEntry(
+          productId: e.productId,
+          productName: e.productName,
+          color: e.color,
+          size: e.size,
+          quantity: newQuantity,
+          threshold: e.threshold,
+          imageUrl: e.imageUrl,
+        ));
+      }
+    }
+    emit(DashboardLoaded(DashboardData(
+      orderCount: data.orderCount,
+      topProductName: data.topProductName,
+      topProductQty: data.topProductQty,
+      topSize: data.topSize,
+      topSizeQty: data.topSizeQty,
+      manualOrderCount: data.manualOrderCount,
+      storefrontOrderCount: data.storefrontOrderCount,
+      lowStockEntries: entries,
+    )));
   }
 
   void resetToCurrentMonth() {

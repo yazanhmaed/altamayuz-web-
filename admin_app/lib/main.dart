@@ -81,14 +81,40 @@ class _SignedInApp extends StatefulWidget {
 }
 
 class _SignedInAppState extends State<_SignedInApp> {
+  bool _verified = false;
+
   @override
   void initState() {
     super.initState();
+    _verifyOwner();
+  }
+
+  /// The rules are the real gate (owner UID lives only there); this probe of
+  /// an owner-only doc just keeps any other account from sitting on a screen
+  /// full of permission errors — it's signed straight back out to Login.
+  Future<void> _verifyOwner() async {
+    try {
+      await FirebaseFirestore.instance.collection('settings').doc('owner').get();
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        setLoginNotice('هذا الحساب غير مصرح له بالدخول');
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+      // Other failures (e.g. offline) fall through — the rules still apply.
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _verified = true);
     registerOwnerToken();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_verified) {
+      return _buildApp(
+        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => InventoryCubit()),
