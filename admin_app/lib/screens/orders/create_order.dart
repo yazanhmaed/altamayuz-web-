@@ -243,6 +243,17 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                // Only offered on new orders; the customer record is written
+                // when the order is created, not on later edits.
+                if (!isEditing) ...[
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('العميل وافق على تلقي العروض'),
+                    value: cubit.marketingConsent,
+                    onChanged: isSaving ? null : cubit.setMarketingConsent,
+                  ),
+                ],
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: isSaving

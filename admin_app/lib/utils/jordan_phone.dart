@@ -62,3 +62,20 @@ String jordanPhoneToLocal(String stored) {
   }
   return digits;
 }
+
+/// Normalises any common way of writing a Jordanian number (07XXXXXXXX,
+/// 7XXXXXXXX, +9627XXXXXXXX, 009627XXXXXXXX, Arabic-Indic digits, spaces or
+/// dashes) to `+962` + the 9-digit local number. Returns null if the result
+/// isn't 9 local digits. Used as the `customers` doc ID, so it must match
+/// `normalizePhoneE164` in functions/src/submitPublicOrder.ts exactly.
+String? normalizePhoneE164(String input) {
+  var digits = toAsciiDigits(input).replaceAll(RegExp(r'\D'), '');
+  digits = digits.replaceFirst(RegExp(r'^00'), '');
+  if (digits.startsWith('962') && digits.length > jordanLocalNumberLength) {
+    digits = digits.substring(3);
+  }
+  digits = digits.replaceFirst(RegExp(r'^0+'), '');
+  return digits.length == jordanLocalNumberLength
+      ? '$jordanDialCode$digits'
+      : null;
+}

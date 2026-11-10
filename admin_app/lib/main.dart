@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'cubit/customers/customers_cubit.dart';
 import 'cubit/dashboard/dashboard_cubit.dart';
 import 'cubit/inventory/inventory_cubit.dart';
 import 'cubit/order/order_cubit.dart';
@@ -120,6 +121,7 @@ class _SignedInAppState extends State<_SignedInApp> {
         BlocProvider(create: (_) => InventoryCubit()),
         BlocProvider(create: (_) => OrderCubit()),
         BlocProvider(create: (_) => DashboardCubit()),
+        BlocProvider(create: (_) => CustomersCubit()),
       ],
       child: _buildApp(home: const HomeScreen()),
     );

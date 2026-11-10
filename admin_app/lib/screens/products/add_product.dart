@@ -54,7 +54,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           }
         },
         builder: (context, state) {
-        final isSaving = state is InventoryLoading;
+        final isSaving = cubit.isSaving || state is InventoryLoading;
         return Form(
           key: _formKey,
           child: ListView(
@@ -297,6 +297,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           children: [
                             GestureDetector(
                               onTap: () async {
+                                if (cubit.isSaving) return;
                                 final picked = await ImagePicker().pickImage(
                                   source: ImageSource.gallery,
                                   imageQuality: 80,
@@ -382,10 +383,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         }
                       },
                 child: isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          ),
+                          if (cubit.uploadTotal > 0 && cubit.uploadDone < cubit.uploadTotal) ...[
+                            const SizedBox(width: 12),
+                            Text('جارٍ رفع الصور ${cubit.uploadDone + 1} من ${cubit.uploadTotal}'),
+                          ],
+                        ],
                       )
                     : const Text('حفظ المنتج'),
               ),

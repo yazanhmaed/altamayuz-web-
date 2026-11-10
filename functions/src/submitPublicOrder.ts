@@ -15,6 +15,7 @@ interface RequestData {
   area: string;
   street: string;
   items: CartItem[];
+  marketingConsent?: boolean;
 }
 
 interface CartDiscountTier {
@@ -95,12 +96,41 @@ const JORDAN_GOVERNORATES = new Set([
   "المفرق",
 ]);
 
-export const submitPublicOrder = onCall<RequestData>(async (request) => {
-  const { customerName, customerPhone, address, area, street, items } =
-    request.data;
+// Must match normalizePhoneE164 in storefront/ and admin_app/
+// lib/utils/jordan_phone.dart. Accepts any common way of writing a Jordanian
+// number (07XXXXXXXX, 7XXXXXXXX, +9627XXXXXXXX, 009627XXXXXXXX, Arabic-Indic
+// digits, spaces/dashes) and returns `+962` + the 9-digit local number, or
+// null when it isn't 9 digits. The result is the `customers` doc ID, so every
+// format of the same number must land on the same string.
+function normalizePhoneE164(raw: string): string | null {
+  let digits = String(raw)
+    .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (c) => String(c.charCodeAt(0) - 0x06f0))
+    .replace(/\D/g, "");
+  digits = digits.replace(/^00/, "");
+  if (digits.startsWith("962") && digits.length > 9) digits = digits.slice(3);
+  digits = digits.replace(/^0+/, "");
+  return /^\d{9}$/.test(digits) ? `+962${digits}` : null;
+}
 
-  if (!customerName || !customerPhone || !address || !area || !items?.length) {
+export const submitPublicOrder = onCall<RequestData>(async (request) => {
+  const { customerName, address, area, street, items } = request.data;
+  // Optional; older storefront builds don't send it. Only a literal `true`
+  // counts as consent.
+  const marketingConsent = request.data.marketingConsent === true;
+
+  if (
+    !customerName ||
+    !request.data.customerPhone ||
+    !address ||
+    !area ||
+    !items?.length
+  ) {
     throw new HttpsError("invalid-argument", "بيانات الطلب ناقصة.");
+  }
+  const customerPhone = normalizePhoneE164(request.data.customerPhone);
+  if (!customerPhone) {
+    throw new HttpsError("invalid-argument", "رقم الهاتف غير صحيح");
   }
   if (!JORDAN_GOVERNORATES.has(address)) {
     throw new HttpsError("invalid-argument", "المحافظة غير صحيحة");
@@ -143,6 +173,7 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
   const cartDiscountTiers = sanitizeTiers(tiersSnap.data()?.tiers);
 
   const orderRef = db.collection("orders").doc();
+  const customerRef = db.collection("customers").doc(customerPhone);
 
   await db.runTransaction(async (tx) => {
     const need: Record<string, Record<string, Record<string, number>>> = {};
@@ -169,6 +200,9 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
       }
       productDocs[productId] = data;
     }
+
+    // Last read — Firestore transactions need every read before any write.
+    const customerSnap = await tx.get(customerRef);
 
     const orderItems: any[] = [];
     for (const [productId, colors] of Object.entries(need)) {
@@ -256,6 +290,44 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
       createdAt: FieldValue.serverTimestamp(),
       deliveryDate: "",
     });
+
+    // Customer record (private, owner-only). Consent is only ever turned ON
+    // here: an unchecked box on a later order must not revoke an earlier yes.
+    const now = FieldValue.serverTimestamp();
+    if (!customerSnap.exists) {
+      tx.set(customerRef, {
+        name: customerName,
+        phone: customerPhone,
+        city: address,
+        area,
+        street: street ?? "",
+        firstOrderAt: now,
+        lastOrderAt: now,
+        ordersCount: 1,
+        totalOrdersValue: total,
+        marketingConsent,
+        consentUpdatedAt: marketingConsent ? now : null,
+        notes: "",
+        tags: [],
+        source: "storefront",
+        createdAt: now,
+        updatedAt: now,
+      });
+    } else {
+      tx.update(customerRef, {
+        name: customerName,
+        city: address,
+        area,
+        street: street ?? "",
+        lastOrderAt: now,
+        ordersCount: FieldValue.increment(1),
+        totalOrdersValue: FieldValue.increment(total),
+        updatedAt: now,
+        ...(marketingConsent
+          ? { marketingConsent: true, consentUpdatedAt: now }
+          : {}),
+      });
+    }
   });
 
   return { orderId: orderRef.id };

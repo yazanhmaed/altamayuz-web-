@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../data/customer/customer_stats.dart';
 import '../../data/order/order_model.dart';
 import '../../data/order/pick_result_model.dart';
 import '../../screens/orders/widgets/qr_scanner_screen.dart';
@@ -30,6 +31,15 @@ class OrderCubit extends Cubit<OrderState> {
   final qrCodeCtrl = TextEditingController();
   final List<OrderItem> selectedItems = [];
   OrderModel? editingOrder;
+
+  /// "العميل وافق على تلقي العروض" switch on the new-order form. Only for
+  /// when the customer agreed verbally; OFF never revokes an earlier consent.
+  bool marketingConsent = false;
+
+  void setMarketingConsent(bool value) {
+    marketingConsent = value;
+    emit(OrderFormChanged());
+  }
 
   /// Fetches orders server-side filtered by [filter] (defaults to whatever
   /// [currentFilter] currently is). Every filter but [OrderFilter.all] is a
@@ -108,6 +118,7 @@ class OrderCubit extends Cubit<OrderState> {
     deliveryDateCtrl.clear();
     qrCodeCtrl.clear();
     selectedItems.clear();
+    marketingConsent = false;
     emit(OrderFormChanged());
   }
 
@@ -201,6 +212,14 @@ class OrderCubit extends Cubit<OrderState> {
             productData[productId] = Map<String, dynamic>.from(snap.data()!);
           }
 
+          // Customer read goes last: every read must happen before any write.
+          final customerPhone = normalizePhoneE164(order.customerPhone);
+          final customerRef = customerPhone == null
+              ? null
+              : _db.collection('customers').doc(customerPhone);
+          final customerSnap =
+              customerRef == null ? null : await tx.get(customerRef);
+
           for (final productId in need.keys) {
             final ref = _db.collection('products').doc(productId);
             final data = productData[productId]!;
@@ -229,6 +248,17 @@ class OrderCubit extends Cubit<OrderState> {
           }
 
           tx.set(orderRef, order.toMap());
+
+          if (customerRef != null) {
+            _upsertCustomer(
+              tx,
+              customerRef,
+              exists: customerSnap!.exists,
+              order: order,
+              phone: customerPhone!,
+              marketingConsent: marketingConsent,
+            );
+          }
         });
       } else {
         // Editing an existing order: stock was already deducted when the order
@@ -245,12 +275,25 @@ class OrderCubit extends Cubit<OrderState> {
           if (!orderSnap.exists) {
             throw Exception('الطلب غير موجود.');
           }
-          final storedOrder = OrderModel.fromMap(orderSnap.data()!);
+          final storedData = orderSnap.data()!;
+          final storedOrder = OrderModel.fromMap(storedData);
+          final newData = order.toMap();
+
+          // Customer delivery stats follow the edit too. Only when the phone
+          // is unchanged; a moved order is left for the recompute tool.
+          final customerRef = customerRefForOrder(_db, storedData);
+          final sameCustomer =
+              customerRef?.path == customerRefForOrder(_db, newData)?.path;
+          final customerSnap = (customerRef != null && sameCustomer)
+              ? await tx.get(customerRef)
+              : null;
 
           // A returned order already gave its stock back; leave inventory
           // untouched and just persist the edited fields.
           if (storedOrder.status == OrderStatus.returned) {
-            tx.set(orderRef, order.toMap());
+            tx.set(orderRef, newData);
+            applyCustomerStatsChange(tx, customerSnap,
+                before: storedData, after: newData);
             return;
           }
 
@@ -316,7 +359,9 @@ class OrderCubit extends Cubit<OrderState> {
             });
           }
 
-          tx.set(orderRef, order.toMap());
+          tx.set(orderRef, newData);
+          applyCustomerStatsChange(tx, customerSnap,
+              before: storedData, after: newData);
         });
       }
 
@@ -331,6 +376,57 @@ class OrderCubit extends Cubit<OrderState> {
       emit(OrderSuccess('تم حفظ الطلب بنجاح.'));
     } catch (e) {
       emit(OrderError(e.toString()));
+    }
+  }
+
+  /// Same rules as the storefront's submitPublicOrder: create with counters at
+  /// 1, or bump counters and refresh name/address. Consent is only ever turned
+  /// ON here, never off. Manual orders have no stored total, so they add 0 to
+  /// `totalOrdersValue`.
+  void _upsertCustomer(
+    Transaction tx,
+    DocumentReference<Map<String, dynamic>> ref, {
+    required bool exists,
+    required OrderModel order,
+    required String phone,
+    required bool marketingConsent,
+  }) {
+    final now = FieldValue.serverTimestamp();
+    final value = order.total ?? 0;
+    if (!exists) {
+      tx.set(ref, {
+        'name': order.customerName,
+        'phone': phone,
+        'city': order.address,
+        'area': order.area,
+        'street': order.street,
+        'firstOrderAt': now,
+        'lastOrderAt': now,
+        'ordersCount': 1,
+        'totalOrdersValue': value,
+        'marketingConsent': marketingConsent,
+        'consentUpdatedAt': marketingConsent ? now : null,
+        'notes': '',
+        'tags': <String>[],
+        'source': 'manual',
+        'createdAt': now,
+        'updatedAt': now,
+      });
+    } else {
+      tx.update(ref, {
+        'name': order.customerName,
+        'city': order.address,
+        'area': order.area,
+        'street': order.street,
+        'lastOrderAt': now,
+        'ordersCount': FieldValue.increment(1),
+        'totalOrdersValue': FieldValue.increment(value),
+        'updatedAt': now,
+        if (marketingConsent) ...{
+          'marketingConsent': true,
+          'consentUpdatedAt': now,
+        },
+      });
     }
   }
 
@@ -353,11 +449,17 @@ class OrderCubit extends Cubit<OrderState> {
           // "تعيين: مرتجع" tap (or a Firestore retry) from double-restocking.
           final orderSnap = await tx.get(orderRef);
           if (!orderSnap.exists) throw Exception('الطلب غير موجود.');
+          final orderData = orderSnap.data()!;
 
           final itemsRaw = List<Map<String, dynamic>>.from(
-            (orderSnap.data()!['items'] as List)
+            (orderData['items'] as List)
                 .map((e) => Map<String, dynamic>.from(e as Map)),
           );
+
+          // Customer read with the other reads (before any write).
+          final customerRef = customerRefForOrder(_db, orderData);
+          final customerSnap =
+              customerRef == null ? null : await tx.get(customerRef);
 
           // (2) aggregate quantities per product/color/size — but only for
           // items NOT already individually `returned` (those were restocked
@@ -423,11 +525,34 @@ class OrderCubit extends Cubit<OrderState> {
             'status': newStatus.englishName,
             'updatedAt': DateTime.now().toIso8601String(),
           });
+          applyCustomerStatsChange(tx, customerSnap, before: orderData, after: {
+            ...orderData,
+            'items': itemsRaw,
+            'status': newStatus.englishName,
+          });
         });
       } else {
-        await _db.collection('orders').doc(order.id).update({
-          'status': newStatus.englishName,
-          'updatedAt': DateTime.now().toIso8601String(),
+        // A transaction (not a bare update) so the customer's delivery stats
+        // move with the status, e.g. `completed` counts pending items as
+        // delivered. Before/after come from the live order, so repeats are
+        // no-ops for the stats.
+        await _db.runTransaction((tx) async {
+          final orderRef = _db.collection('orders').doc(order.id);
+          final orderSnap = await tx.get(orderRef);
+          if (!orderSnap.exists) throw Exception('الطلب غير موجود.');
+          final orderData = orderSnap.data()!;
+          final customerRef = customerRefForOrder(_db, orderData);
+          final customerSnap =
+              customerRef == null ? null : await tx.get(customerRef);
+
+          tx.update(orderRef, {
+            'status': newStatus.englishName,
+            'updatedAt': DateTime.now().toIso8601String(),
+          });
+          applyCustomerStatsChange(tx, customerSnap, before: orderData, after: {
+            ...orderData,
+            'status': newStatus.englishName,
+          });
         });
       }
 
@@ -459,9 +584,10 @@ class OrderCubit extends Cubit<OrderState> {
         final orderRef = _db.collection('orders').doc(order.id);
         final orderSnap = await tx.get(orderRef);
         if (!orderSnap.exists) throw Exception('الطلب غير موجود.');
+        final orderData = orderSnap.data()!;
 
         final itemsRaw = List<Map<String, dynamic>>.from(
-          (orderSnap.data()!['items'] as List)
+          (orderData['items'] as List)
               .map((e) => Map<String, dynamic>.from(e as Map)),
         );
         final index = itemsRaw.indexWhere((m) => m['itemId'] == itemId);
@@ -477,6 +603,11 @@ class OrderCubit extends Cubit<OrderState> {
         // stale in-memory `order` passed into this method. This is what
         // actually prevents double-restocking under concurrent/duplicate calls.
         if (currentStatus == newStatus) return;
+
+        // Customer read before any write (the product read below too).
+        final customerRef = customerRefForOrder(_db, orderData);
+        final customerSnap =
+            customerRef == null ? null : await tx.get(customerRef);
 
         final shouldRestock = newStatus == ItemStatus.returned &&
             currentStatus != ItemStatus.returned;
@@ -512,6 +643,8 @@ class OrderCubit extends Cubit<OrderState> {
           'items': itemsRaw,
           'updatedAt': DateTime.now().toIso8601String(),
         });
+        applyCustomerStatsChange(tx, customerSnap,
+            before: orderData, after: {...orderData, 'items': itemsRaw});
       });
 
       final idx = order.items.indexWhere((i) => i.itemId == itemId);

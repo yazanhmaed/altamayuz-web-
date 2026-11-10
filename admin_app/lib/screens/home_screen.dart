@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'customers/customers_screen.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'orders/order_list.dart';
 import 'products/product_list.dart';
@@ -19,6 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
     DashboardScreen(),
     ProductListScreen(),
     OrderListScreen(),
+    CustomersScreen(),
     CartDiscountSettingsScreen(),
   ];
 
@@ -33,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), label: 'الرئيسية'),
           NavigationDestination(icon: Icon(Icons.inventory_2_outlined), label: 'المنتجات'),
           NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'الطلبات'),
+          NavigationDestination(icon: Icon(Icons.people_outline), label: 'العملاء'),
           NavigationDestination(icon: Icon(Icons.percent_outlined), label: 'الخصومات'),
         ],
       ),

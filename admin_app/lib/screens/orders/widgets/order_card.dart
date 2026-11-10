@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../cubit/order/order_cubit.dart';
 import '../../../data/order/order_model.dart';
+import '../../../utils/clipboard.dart';
+import '../../../utils/jordan_phone.dart';
 
 String _money(double v) => '${v.toStringAsFixed(2)} د.أ';
 
@@ -208,65 +211,7 @@ class OrderCard extends StatelessWidget {
             const SizedBox(height: 12),
 
             // 2. Customer Info
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-                  child: Icon(Icons.person_outline, color: theme.colorScheme.primary),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        order.customerName,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        DateFormat('d MMM yyyy — h:mm a', 'ar').format(order.createdAt),
-                        style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Icon(Icons.phone_outlined,
-                              size: 14, color: theme.colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 4),
-                          Text(
-                            order.customerPhone,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.location_on_outlined,
-                              size: 14, color: theme.colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              '${order.address} - ${order.area}${order.street.isNotEmpty ? ' (${order.street})' : ''}',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            _CustomerInfo(order: order),
 
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
@@ -391,6 +336,169 @@ class OrderCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Local Jordanian form (07XXXXXXXX), Latin digits only. Falls back to the
+/// stored value's digits if it isn't a valid Jordanian number.
+String _localPhone(String stored) {
+  final local = jordanPhoneToLocal(stored);
+  return local.length == jordanLocalNumberLength
+      ? '0$local'
+      : toAsciiDigits(stored).replaceAll(RegExp(r'\D'), '');
+}
+
+/// International form (+9627XXXXXXXX), Latin digits only.
+String _internationalPhone(String stored) =>
+    normalizePhoneE164(stored) ?? toAsciiDigits(stored).replaceAll(RegExp(r'[^0-9+]'), '');
+
+/// "المحافظة - المنطقة - الشارع", skipping empty parts.
+String _addressLine(OrderModel order) => [order.address, order.area, order.street]
+    .map((p) => p.trim())
+    .where((p) => p.isNotEmpty)
+    .join(' - ');
+
+String _customerBlock(OrderModel order) => [
+      'الاسم: ${order.customerName.trim()}',
+      'الهاتف: ${_localPhone(order.customerPhone)}',
+      'العنوان: ${_addressLine(order)}',
+    ].join('\n');
+
+enum _CopyAction { international, address, all }
+
+class _CustomerInfo extends StatelessWidget {
+  final OrderModel order;
+  const _CustomerInfo({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final mutedStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final name = order.customerName.trim();
+    final localPhone = _localPhone(order.customerPhone);
+
+    Widget copyButton(VoidCallback onPressed) => IconButton(
+          onPressed: onPressed,
+          tooltip: 'نسخ',
+          icon: const Icon(Icons.copy_rounded),
+          iconSize: 18,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          color: theme.colorScheme.onSurfaceVariant,
+        );
+
+    void copyName() => copyToClipboard(context, name, 'الاسم');
+    void copyPhone() => copyToClipboard(context, localPhone, 'الرقم');
+
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: GestureDetector(
+                onLongPress: copyName,
+                child: Text(
+                  order.customerName,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            copyButton(copyName),
+          ],
+        ),
+        Text(
+          DateFormat('d MMM yyyy — h:mm a', 'ar').format(order.createdAt),
+          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+        ),
+        Row(
+          children: [
+            Icon(Icons.phone_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Flexible(
+              child: GestureDetector(
+                onLongPress: copyPhone,
+                child: Text(order.customerPhone, style: mutedStyle),
+              ),
+            ),
+            copyButton(copyPhone),
+          ],
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.location_on_outlined,
+                size: 14, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                '${order.address} - ${order.area}${order.street.isNotEmpty ? ' (${order.street})' : ''}',
+                style: mutedStyle,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+          child: Icon(Icons.person_outline, color: theme.colorScheme.primary),
+        ),
+        const SizedBox(width: 12),
+        // On web, let the admin select the text with the mouse too.
+        Expanded(child: kIsWeb ? SelectionArea(child: details) : details),
+        PopupMenuButton<_CopyAction>(
+          tooltip: 'خيارات النسخ',
+          icon: const Icon(Icons.more_vert, size: 20),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 40),
+          onSelected: (action) {
+            switch (action) {
+              case _CopyAction.international:
+                copyToClipboard(context, _internationalPhone(order.customerPhone), 'الرقم الدولي');
+              case _CopyAction.address:
+                copyToClipboard(context, _addressLine(order), 'العنوان');
+              case _CopyAction.all:
+                copyToClipboard(context, _customerBlock(order), 'بيانات العميل');
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: _CopyAction.international,
+              child: ListTile(
+                leading: Icon(Icons.public),
+                title: Text('نسخ الرقم الدولي'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: _CopyAction.address,
+              child: ListTile(
+                leading: Icon(Icons.location_on_outlined),
+                title: Text('نسخ العنوان'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem(
+              value: _CopyAction.all,
+              child: ListTile(
+                leading: Icon(Icons.content_copy_rounded),
+                title: Text('نسخ بيانات العميل'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

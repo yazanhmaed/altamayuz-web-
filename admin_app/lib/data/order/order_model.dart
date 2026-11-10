@@ -33,6 +33,10 @@ class OrderItem {
   final String itemId;
   ItemStatus status;
 
+  /// Per-unit price set by the storefront function (null for manual orders).
+  /// Carried through so an owner edit doesn't erase it.
+  final double? unitPrice;
+
   OrderItem({
     required this.productId,
     required this.color,
@@ -44,6 +48,7 @@ class OrderItem {
     this.productName,
     required this.itemId,
     this.status = ItemStatus.pending,
+    this.unitPrice,
   });
 
   OrderItem copyWith({
@@ -69,6 +74,7 @@ class OrderItem {
       isPrimary: isPrimary ?? this.isPrimary,
       itemId: itemId ?? this.itemId,
       status: status ?? this.status,
+      unitPrice: unitPrice,
     );
   }
 
@@ -83,6 +89,7 @@ class OrderItem {
     'quantity': quantity,
     'isPrimary': isPrimary,
     'status': status.englishName,
+    if (unitPrice != null) 'unitPrice': unitPrice,
   };
 
   factory OrderItem.fromMap(Map<String, dynamic> map) {
@@ -100,6 +107,7 @@ class OrderItem {
         (s) => s.englishName == map['status'],
         orElse: () => ItemStatus.pending,
       ),
+      unitPrice: (map['unitPrice'] as num?)?.toDouble(),
     );
   }
 }

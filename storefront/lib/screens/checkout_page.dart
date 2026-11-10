@@ -31,6 +31,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final _streetCtrl = TextEditingController();
   bool _submitting = false;
 
+  /// Opt-in to offers. Unchecked by default; unchecking on a later order
+  /// never revokes an earlier opt-in (enforced server-side).
+  bool _marketingConsent = false;
+
   /// Cart-wide quantity-discount tiers, read once on load. Empty until the
   /// one-time Firestore read completes, and empty forever if none are
   /// configured — either way `_discount` then resolves to "no discount".
@@ -87,6 +91,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         'address': _city!,
         'area': _areaCtrl.text.trim(),
         'street': _streetCtrl.text.trim(),
+        'marketingConsent': _marketingConsent,
         'items': _items
             .map((l) => {
                   'productId': l.product.id,
@@ -433,7 +438,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
+
+          // Marketing opt-in — optional, unchecked by default.
+          CheckboxListTile(
+            value: _marketingConsent,
+            onChanged: _submitting
+                ? null
+                : (v) => setState(() => _marketingConsent = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('أرغب بتلقي العروض والتخفيضات الجديدة'),
+            subtitle: Text(
+              'يمكنك إلغاء الاشتراك في أي وقت',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
 
           // Informational Badges
           Container(
@@ -480,7 +503,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ),
           ),
 
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+
+          Text(
+            'نحتفظ باسمك ورقمك وعنوانك لأغراض التوصيل والتواصل بخصوص طلباتك',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
 
           // Submit Button
           SizedBox(

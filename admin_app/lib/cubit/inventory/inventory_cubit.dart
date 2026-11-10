@@ -119,6 +119,11 @@ class InventoryCubit extends Cubit<InventoryState> {
   bool isFeatured = false;
   ProductModel? editingProduct;
 
+  /// True while [saveProduct] runs; blocks a second save (double tap).
+  bool isSaving = false;
+  int uploadDone = 0;
+  int uploadTotal = 0;
+
   /// Optional size guide: one cm value per entry in [globalSizeCtrls],
   /// aligned by index, active only while [addSizeGuide] is true.
   bool addSizeGuide = false;
@@ -351,32 +356,28 @@ class InventoryCubit extends Cubit<InventoryState> {
     emit(InventoryFormChanged());
   }
 
+  Reference _colorImageRef(String productId, String color) =>
+      FirebaseStorage.instance.ref('products/$productId/$color.jpg');
+
   Future<String> uploadColorImage({
     required String productId,
     required String color,
     required XFile imageFile,
   }) async {
     final bytes = await imageFile.readAsBytes();
-    final ref = FirebaseStorage.instance.ref('products/$productId/$color.jpg');
+    final ref = _colorImageRef(productId, color);
     await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
     return ref.getDownloadURL();
   }
 
-  Future<Map<String, String>> _uploadPendingImages(
-    String productId,
-    Map<String, String> existingUrls,
-  ) async {
-    final Map<String, String> result = Map.from(existingUrls);
-    for (final entry in pendingColorImages.entries) {
-      if (entry.value == null) continue;
-      result[entry.key] = await uploadColorImage(
-        productId: productId,
-        color: entry.key,
-        imageFile: entry.value!,
-      );
+  /// Best effort: deletes files uploaded during a save that didn't end up in
+  /// a saved product.
+  Future<void> _deleteUploads(List<Reference> refs) async {
+    for (final ref in refs) {
+      try {
+        await ref.delete();
+      } catch (_) {}
     }
-    pendingColorImages.clear();
-    return result;
   }
 
   ProductModel _buildProductFromInputs(String id, double? salePrice) {
@@ -436,6 +437,7 @@ class InventoryCubit extends Cubit<InventoryState> {
   }
 
   Future<void> saveProduct() async {
+    if (isSaving) return;
     if (nameCtrl.text.trim().isEmpty) {
       emit(InventoryError('اسم المنتج مطلوب.'));
       return;
@@ -453,26 +455,75 @@ class InventoryCubit extends Cubit<InventoryState> {
       salePrice = parsed;
     }
 
+    isSaving = true;
+    final toUpload = [
+      for (final e in pendingColorImages.entries)
+        if (e.value != null) MapEntry(e.key, e.value!),
+    ];
+    uploadTotal = toUpload.length;
+    uploadDone = 0;
     emit(InventoryLoading());
-    try {
-      final id = editingProduct?.id ?? _db.collection('products').doc().id;
-      var product = _buildProductFromInputs(id, salePrice);
-      final uploadedUrls = await _uploadPendingImages(id, product.imageUrls);
-      product = product.copyWith(imageUrls: uploadedUrls);
 
-      await _db.collection('products').doc(id).set(product.toMap());
-
-      final index = products.indexWhere((p) => p.id == id);
-      if (index >= 0) {
-        products[index] = product;
-      } else {
-        products.add(product);
-      }
-      clearForm();
-      emit(InventorySuccess('تم حفظ المنتج بنجاح.'));
-    } catch (e) {
-      emit(InventoryError(e.toString()));
+    void finish() {
+      isSaving = false;
+      uploadTotal = 0;
+      uploadDone = 0;
     }
+
+    final id = editingProduct?.id ?? _db.collection('products').doc().id;
+    var product = _buildProductFromInputs(id, salePrice);
+
+    // 1. Upload every picked image before touching Firestore. Files that
+    // replace an existing image overwrite it in place, so only brand-new
+    // files are safe to delete if the save fails later.
+    final imageUrls = Map<String, String>.from(product.imageUrls);
+    final newUploads = <Reference>[];
+    try {
+      for (final entry in toUpload) {
+        final ref = _colorImageRef(id, entry.key);
+        final bytes = await entry.value.readAsBytes();
+        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+        if (!product.imageUrls.containsKey(entry.key)) newUploads.add(ref);
+        imageUrls[entry.key] = await ref.getDownloadURL();
+        uploadDone++;
+        emit(InventoryLoading());
+      }
+    } catch (e) {
+      await _deleteUploads(newUploads);
+      finish();
+      emit(InventoryError('فشل رفع الصور، لم يتم حفظ المنتج. حاول مرة أخرى.\n$e'));
+      return;
+    }
+
+    // 2. Write the product once, with its final image URLs.
+    product = product.copyWith(imageUrls: imageUrls);
+    try {
+      await _db.collection('products').doc(id).set(product.toMap());
+    } catch (e) {
+      await _deleteUploads(newUploads);
+      finish();
+      emit(InventoryError('فشل حفظ المنتج. حاول مرة أخرى.\n$e'));
+      return;
+    }
+    pendingColorImages.clear();
+
+    // 3. Put the saved document into the list (falling back to the exact
+    // model that was written if the read-back fails).
+    var saved = product;
+    try {
+      final doc = await _db.collection('products').doc(id).get();
+      if (doc.exists) saved = ProductModel.fromMap(doc.data()!);
+    } catch (_) {}
+    final index = products.indexWhere((p) => p.id == id);
+    if (index >= 0) {
+      products[index] = saved;
+    } else {
+      products.add(saved);
+    }
+
+    finish();
+    clearForm();
+    emit(InventorySuccess('تم حفظ المنتج بنجاح.'));
   }
 
   Future<void> deleteProduct(String productId) async {

@@ -30,5 +30,21 @@ service cloud.firestore {
       allow read: if isOwner() || docId == "cartDiscountTiers";
       allow write: if isOwner();
     }
+
+    // Customer records hold private personal data (name, phone, address,
+    // marketing consent). Written by submitPublicOrder (Admin SDK) or the
+    // owner; never readable or writable from the public storefront.
+    match /customers/{id} {
+      allow read, write: if isOwner();
+    }
+
+    // Manual WhatsApp offer campaigns and who received each one. Owner-only.
+    match /campaigns/{id} {
+      allow read, write: if isOwner();
+
+      match /sent/{phone} {
+        allow read, write: if isOwner();
+      }
+    }
   }
 }

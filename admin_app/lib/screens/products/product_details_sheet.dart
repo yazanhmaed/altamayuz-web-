@@ -39,7 +39,8 @@ Future<void> showProductDetails(BuildContext context, String productId) {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.9),
+          constraints:
+              BoxConstraints(maxWidth: 520, maxHeight: size.height * 0.9),
           child: _ProductDetailsView(productId: productId),
         ),
       ),
@@ -112,7 +113,8 @@ class _ProductDetailsViewState extends State<_ProductDetailsView> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('حذف المنتج'),
-        content: Text('هل أنت متأكد من حذف «${product.name}»؟ لا يمكن التراجع.'),
+        content:
+            Text('هل أنت متأكد من حذف «${product.name}»؟ لا يمكن التراجع.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -171,7 +173,8 @@ class _ProductDetailsViewState extends State<_ProductDetailsView> {
               bottomNavigationBar: _ActionBar(
                 deleting: _deleting,
                 onEdit: () => _edit(product),
-                onRestock: product.colors.isEmpty ? null : () => _restock(product),
+                onRestock:
+                    product.colors.isEmpty ? null : () => _restock(product),
                 onDelete: () => _delete(product),
               ),
             ),
@@ -204,7 +207,8 @@ class _DetailsContent extends StatelessWidget {
             children: [
               Text(
                 product.name,
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                style: theme.textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -241,12 +245,13 @@ class _DetailsContent extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               _Prices(product: product),
-              if (product.description.trim().isNotEmpty) ...[
-                const _SectionTitle('الوصف'),
-                Text(product.description.trim(), style: theme.textTheme.bodyMedium),
-              ],
               _SectionTitle('المخزون — الكمية الكلية: ${product.totalQty}'),
               _StockBreakdown(product: product),
+              if (product.description.trim().isNotEmpty) ...[
+                const _SectionTitle('الوصف'),
+                Text(product.description.trim(),
+                    style: theme.textTheme.bodyMedium),
+              ],
               if (product.sizeGuideCm.isNotEmpty) ...[
                 const _SectionTitle('دليل المقاسات (سم)'),
                 _SizeGuideTable(guide: product.sizeGuideCm),
@@ -414,7 +419,10 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(top: 20, bottom: 8),
       child: Text(
         text,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+        style: Theme.of(context)
+            .textTheme
+            .titleSmall
+            ?.copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -451,7 +459,8 @@ class _Pill extends StatelessWidget {
             child: Text(
               label,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: foreground, fontSize: 12, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                  color: foreground, fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -524,14 +533,15 @@ class _StockChip extends StatelessWidget {
       foreground = Colors.green.shade900;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         '$size  :  $qty',
-        style: TextStyle(color: foreground, fontSize: 12, fontWeight: FontWeight.w500),
+        style: TextStyle(
+            color: foreground, fontSize: 14, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -563,11 +573,15 @@ class _SizeGuideTable extends StatelessWidget {
               children: const [
                 Padding(
                   padding: cellPadding,
-                  child: Text('المقاس', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  child: Text('المقاس',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 ),
                 Padding(
                   padding: cellPadding,
-                  child: Text('طول القدم (سم)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  child: Text('طول القدم (سم)',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 ),
               ],
             ),
@@ -576,11 +590,13 @@ class _SizeGuideTable extends StatelessWidget {
                 children: [
                   Padding(
                     padding: cellPadding,
-                    child: Text(entry.key, style: const TextStyle(fontSize: 13)),
+                    child:
+                        Text(entry.key, style: const TextStyle(fontSize: 13)),
                   ),
                   Padding(
                     padding: cellPadding,
-                    child: Text(_cm(entry.value), style: const TextStyle(fontSize: 13)),
+                    child: Text(_cm(entry.value),
+                        style: const TextStyle(fontSize: 13)),
                   ),
                 ],
               ),
@@ -622,7 +638,8 @@ class _ActionBar extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: deleting ? null : onEdit,
                   icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('تعديل', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  label: const Text('تعديل',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ),
               if (onRestock != null) ...[
@@ -631,7 +648,8 @@ class _ActionBar extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: deleting ? null : onRestock,
                     icon: const Icon(Icons.add_box_outlined, size: 18),
-                    label: const Text('إضافة كمية', maxLines: 1, overflow: TextOverflow.ellipsis),
+                    label: const Text('إضافة كمية',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
                 ),
               ],
@@ -647,7 +665,8 @@ class _ActionBar extends StatelessWidget {
                     ? SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: scheme.error),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: scheme.error),
                       )
                     : const Text('حذف'),
               ),
