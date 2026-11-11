@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../analytics.dart';
 import '../cart/cart_controller.dart';
+import '../data/promotions_repository.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
@@ -233,6 +234,25 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         const SizedBox(height: 4),
         PriceDisplay(
             product: product, fontSize: 22, originalFontSize: 16, decimals: 2),
+        // Saved amount per unit (sale price or promotion), on its own line.
+        ListenableBuilder(
+          listenable: promotionsRepository,
+          builder: (context, _) {
+            final saved = product.pricing.savedAmount;
+            if (saved <= 0) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'وفّرت ${saved.toStringAsFixed(2)} د.أ',
+                style: const TextStyle(
+                  color: AppColors.danger,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            );
+          },
+        ),
         if (product.description.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text(
@@ -358,6 +378,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                       'item_name': product.name,
                       'price': product.effectivePrice,
                       'quantity': 1,
+                      if (product.activePromotion != null)
+                        'promotion_id': product.activePromotion!.id,
                     },
                   );
                   showAddedToCartToast(context, product.name);

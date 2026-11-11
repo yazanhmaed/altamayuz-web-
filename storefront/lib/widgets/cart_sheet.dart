@@ -6,6 +6,7 @@ import '../data/cart_discount_repository.dart';
 import '../models/cart_discount.dart';
 import '../theme/app_theme.dart';
 
+import 'prices_updated_note.dart';
 import 'ui_helpers.dart';
 
 /// Asks before removing [line] from the cart; removes it only on "حذف".
@@ -315,6 +316,14 @@ class _CartContentState extends State<CartContent> {
                 ),
               ),
               const Divider(height: 1),
+              if (cart.isNotEmpty)
+                ValueListenableBuilder<bool>(
+                  valueListenable: cartController.pricesUpdated,
+                  builder: (context, updated, _) => updated
+                      ? PricesUpdatedNote(
+                          onDismiss: cartController.dismissPricesUpdated)
+                      : const SizedBox.shrink(),
+                ),
 
               // Body Content
               if (cart.isEmpty)

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../data/promotions_repository.dart';
 import '../models/public_product_model.dart';
 import '../utils/responsive.dart';
 import '../widgets/product_card.dart';
@@ -39,58 +40,65 @@ class CategoryProductsPage extends StatelessWidget {
             .collection('products')
             .where('isActive', isEqualTo: true)
             .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return ResponsiveCenter(
-              child: GridView.builder(
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.68,
-                ),
-                itemCount: 6,
-                itemBuilder: (_, __) => const ProductCardSkeleton(),
-              ),
-            );
-          }
+        builder: (context, snapshot) => ListenableBuilder(
+          // Re-filter when a promotion starts/ends (the offers page lists
+          // promotion products too).
+          listenable: promotionsRepository,
+          builder: (context, _) => _buildBody(context, snapshot),
+        ),
+      ),
+    );
+  }
 
-          final products = snapshot.data!.docs
-              .map((d) => PublicProductModel.fromProductDoc(
-                    d.id,
-                    d.data() as Map<String, dynamic>,
-                  ))
-              .whereType<PublicProductModel>()
-              .where(_matches)
-              .toList();
+  Widget _buildBody(
+      BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+    if (!snapshot.hasData) {
+      return ResponsiveCenter(
+        child: GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 0.68,
+          ),
+          itemCount: 6,
+          itemBuilder: (_, __) => const ProductCardSkeleton(),
+        ),
+      );
+    }
 
-          if (products.isEmpty) {
-            return Center(
-              child: Text(onlyOnSale
-                  ? 'لا توجد عروض متاحة حاليًا'
-                  : 'لا توجد منتجات في هذا التصنيف بعد'),
-            );
-          }
+    final products = snapshot.data!.docs
+        .map((d) => PublicProductModel.fromProductDoc(
+              d.id,
+              d.data() as Map<String, dynamic>,
+            ))
+        .whereType<PublicProductModel>()
+        .where(_matches)
+        .toList();
 
-          return ResponsiveCenter(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = Responsive.gridColumns(constraints.maxWidth);
-                return GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
-                    childAspectRatio: 0.68,
-                  ),
-                  itemCount: products.length,
-                  itemBuilder: (context, i) =>
-                      ProductCard(product: products[i]),
-                );
-              },
+    if (products.isEmpty) {
+      return Center(
+        child: Text(onlyOnSale
+            ? 'لا توجد عروض متاحة حاليًا'
+            : 'لا توجد منتجات في هذا التصنيف بعد'),
+      );
+    }
+
+    return ResponsiveCenter(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = Responsive.gridColumns(constraints.maxWidth);
+          return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 0.68,
             ),
+            itemCount: products.length,
+            itemBuilder: (context, i) => ProductCard(product: products[i]),
           );
         },
       ),

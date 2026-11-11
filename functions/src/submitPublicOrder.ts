@@ -1,5 +1,10 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import {
+  effectivePrice,
+  MAX_PROMO_PRODUCTS,
+  PromotionLike,
+} from "./pricing";
 
 interface CartItem {
   productId: string;
@@ -113,6 +118,44 @@ function normalizePhoneE164(raw: string): string | null {
   return /^\d{9}$/.test(digits) ? `+962${digits}` : null;
 }
 
+// Reads the promotions that may be running at `now` (switched on and not yet
+// ended). The start date is checked by the shared pricing rule. Malformed
+// documents are skipped rather than failing the order.
+async function loadRunningPromotions(
+  db: FirebaseFirestore.Firestore,
+  now: Date
+): Promise<PromotionLike[]> {
+  const snap = await db
+    .collection("promotions")
+    .where("isActive", "==", true)
+    .where("endAt", ">", Timestamp.fromDate(now))
+    .get();
+  const list: PromotionLike[] = [];
+  for (const doc of snap.docs) {
+    const d = doc.data();
+    if (!(d.startAt instanceof Timestamp) || !(d.endAt instanceof Timestamp)) {
+      continue;
+    }
+    const productIds = Array.isArray(d.productIds)
+      ? d.productIds
+          .filter((x: unknown): x is string => typeof x === "string")
+          .slice(0, MAX_PROMO_PRODUCTS)
+      : [];
+    list.push({
+      id: doc.id,
+      name: typeof d.name === "string" ? d.name : "",
+      // amountOff (JOD) is current; percent is read only for legacy docs.
+      amountOff: typeof d.amountOff === "number" ? d.amountOff : null,
+      percent: typeof d.percent === "number" ? d.percent : null,
+      productIds,
+      startAt: d.startAt.toDate(),
+      endAt: d.endAt.toDate(),
+      isActive: d.isActive === true,
+    });
+  }
+  return list;
+}
+
 export const submitPublicOrder = onCall<RequestData>(async (request) => {
   const { customerName, address, area, street, items } = request.data;
   // Optional; older storefront builds don't send it. Only a literal `true`
@@ -172,6 +215,11 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
     .get();
   const cartDiscountTiers = sanitizeTiers(tiersSnap.data()?.tiers);
 
+  // Product-group promotions, read once per order with SERVER time. Like the
+  // tiers, this is config: a plain read outside the transaction is fine.
+  const pricingNow = new Date();
+  const promotions = await loadRunningPromotions(db, pricingNow);
+
   const orderRef = db.collection("orders").doc();
   const customerRef = db.collection("customers").doc(customerPhone);
 
@@ -208,10 +256,21 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
     for (const [productId, colors] of Object.entries(need)) {
       const data = productDocs[productId];
       const stock = { ...data.stock };
-      const price: number =
-        data.salePrice && data.salePrice > 0 && data.salePrice < data.price
-          ? data.salePrice
-          : data.price;
+      // Shared pricing rule (price / salePrice / promotions, best wins). The
+      // client never sends a price.
+      const originalPrice = Number(data.price);
+      const pricing = effectivePrice(
+        {
+          id: productId,
+          price: originalPrice,
+          salePrice:
+            typeof data.salePrice === "number" ? data.salePrice : null,
+        },
+        promotions,
+        pricingNow
+      );
+      const price = pricing.price;
+      const promo = pricing.promotion;
 
       for (const [color, sizes] of Object.entries(colors)) {
         const colorStock = { ...(stock[color] ?? {}) };
@@ -233,6 +292,8 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
             quantity: qty,
             sku: `${productId}-${color}-${size}`,
             unitPrice: price,
+            originalPrice,
+            ...(promo ? { promoId: promo.id, promoName: promo.name } : {}),
             isPrimary: true,
             status: "pending",
           });
@@ -247,7 +308,7 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
     }
 
     // Pre-discount sum of the order lines (each unitPrice is already the
-    // server-derived salePrice/price, so per-product discounts are baked in).
+    // server-derived effective price, so sale/promotion discounts are baked in).
     const subtotal = orderItems.reduce(
       (sum, it) => sum + it.unitPrice * it.quantity,
       0

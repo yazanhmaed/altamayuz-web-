@@ -1,3 +1,6 @@
+import '../data/promotions_repository.dart';
+import '../pricing/promotion_pricing.dart' as rule;
+
 class ProductVariant {
   final String color;
   final String imageUrl;
@@ -43,12 +46,25 @@ class PublicProductModel {
     this.sizeGuideCm = const {},
   });
 
-  bool get isOnSale => salePrice != null && salePrice! > 0 && salePrice! < price;
+  /// The price the customer pays right now: the best of [price], a valid
+  /// [salePrice], and any running promotion listing this product (shared rule
+  /// in promotion_pricing.dart; the server applies the same one per order).
+  rule.EffectivePrice get pricing => rule.effectivePrice(
+        productId: id,
+        price: price,
+        salePrice: salePrice,
+        promotions: promotionsRepository.promotions,
+        now: DateTime.now(),
+      );
 
-  double get effectivePrice => isOnSale ? salePrice! : price;
+  bool get isOnSale => pricing.price < price;
 
-  int get discountPercent =>
-      isOnSale ? (((price - salePrice!) / price) * 100).round() : 0;
+  double get effectivePrice => pricing.price;
+
+  int get discountPercent => pricing.discountPercent;
+
+  /// The promotion that sets the current price, if any (for analytics).
+  rule.Promotion? get activePromotion => pricing.promotion;
 
   bool get isAvailable => variants.any((v) => v.isAvailable);
   String get coverImage {

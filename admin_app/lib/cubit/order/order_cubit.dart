@@ -4,11 +4,34 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/customer/customer_stats.dart';
 import '../../data/order/order_model.dart';
 import '../../data/order/pick_result_model.dart';
+import '../../data/product/product_model.dart';
 import '../../screens/orders/widgets/qr_scanner_screen.dart';
+import '../../utils/arabic_digits.dart';
 import '../../utils/jordan_phone.dart';
+import '../../utils/promotion_pricing.dart' show roundMoney;
 import 'order_state.dart';
 
 enum OrderFilter { active, all, pending, shipped, completed, returned }
+
+/// Thrown inside the order transaction when a variant has less live stock
+/// than the order needs. Aborts the whole transaction (no partial deduction).
+class StockShortageException implements Exception {
+  final String name;
+  final String color;
+  final String size;
+  final int available;
+  const StockShortageException({
+    required this.name,
+    required this.color,
+    required this.size,
+    required this.available,
+  });
+
+  String get message => 'المقاس $size ($color) من «$name» متوفر منه $available فقط';
+
+  @override
+  String toString() => message;
+}
 
 class OrderCubit extends Cubit<OrderState> {
   OrderCubit() : super(OrderInitial());
@@ -31,6 +54,124 @@ class OrderCubit extends Cubit<OrderState> {
   final qrCodeCtrl = TextEditingController();
   final List<OrderItem> selectedItems = [];
   OrderModel? editingOrder;
+
+  // ---- "قيمة الطلب" (order value) ----
+  /// Holds the order's final `total`. AUTO by default: follows
+  /// [computedOrderValue] as items change. Once the owner types in it, it
+  /// switches to MANUAL ([orderValueManual]) until [resetOrderValue].
+  final orderValueCtrl = TextEditingController();
+  bool orderValueManual = false;
+
+  /// Sum of the items' `unitPrice × quantity` (items without a price, from
+  /// older manual orders, count as 0). Saved as the order's `subtotal`.
+  double get itemsSubtotal => roundMoney(selectedItems.fold<double>(
+      0, (acc, i) => acc + (i.unitPrice ?? 0) * i.quantity));
+
+  bool get hasPricedItems => selectedItems.any((i) => i.unitPrice != null);
+
+  int _qtyIn(Iterable<OrderItem> items, String productId, String color, String size) =>
+      items
+          .where((i) => i.productId == productId && i.color == color && i.size == size)
+          .fold<int>(0, (n, i) => n + i.quantity);
+
+  /// Most units of this variant the order may hold in total: the live stock,
+  /// plus — when editing — what this order already took (deducted at save).
+  int maxForVariant(ProductModel product, String color, String size) {
+    final live = product.stock[color]?[size] ?? 0;
+    final held = editingOrder == null
+        ? 0
+        : _qtyIn(editingOrder!.items, product.id, color, size);
+    final max = live + held;
+    return max < 0 ? 0 : max;
+  }
+
+  /// How many more units of this variant can still be added to the order
+  /// (across all its lines).
+  int remainingFor(ProductModel product, String color, String size) {
+    final r = maxForVariant(product, color, size) -
+        _qtyIn(selectedItems, product.id, color, size);
+    return r < 0 ? 0 : r;
+  }
+
+  /// Trims lines that ask for more than the live stock now allows (newest
+  /// lines first; a line that reaches 0 is removed). Returns one warning per
+  /// changed variant, empty when nothing changed. Products missing from
+  /// [products] are left alone.
+  List<String> reconcileWithStock(List<ProductModel> products) {
+    final byId = {for (final p in products) p.id: p};
+    final warnings = <String>[];
+    final seen = <String>{};
+    for (final line in List.of(selectedItems)) {
+      final key = '${line.productId}|${line.color}|${line.size}';
+      if (!seen.add(key)) continue;
+      final product = byId[line.productId];
+      if (product == null) continue;
+      final max = maxForVariant(product, line.color, line.size);
+      var excess = _qtyIn(selectedItems, line.productId, line.color, line.size) - max;
+      if (excess <= 0) continue;
+      for (var i = selectedItems.length - 1; i >= 0 && excess > 0; i--) {
+        final it = selectedItems[i];
+        if (it.productId != line.productId || it.color != line.color || it.size != line.size) {
+          continue;
+        }
+        final cut = excess < it.quantity ? excess : it.quantity;
+        excess -= cut;
+        if (cut == it.quantity) {
+          selectedItems.removeAt(i);
+        } else {
+          selectedItems[i] = it.copyWith(quantity: it.quantity - cut);
+        }
+      }
+      warnings.add(max == 0
+          ? 'أُزيل «${product.name}» ${line.size} (${line.color}): نفد من المخزون'
+          : 'خُفّضت كمية «${product.name}» ${line.size} (${line.color}) إلى $max حسب المخزون');
+    }
+    if (warnings.isNotEmpty) {
+      if (selectedItems.isNotEmpty && !selectedItems.any((i) => i.isPrimary)) {
+        selectedItems[0] = selectedItems[0].copyWith(isPrimary: true);
+      }
+      _syncOrderValue();
+      emit(OrderFormChanged());
+    }
+    return warnings;
+  }
+
+  /// The automatic order value: items subtotal minus any existing cart
+  /// discount (only storefront orders have one), never below 0.
+  double get computedOrderValue {
+    final v = itemsSubtotal - (editingOrder?.cartDiscountAmount ?? 0);
+    return v < 0 ? 0 : roundMoney(v);
+  }
+
+  /// The typed order value, or null when the field is empty/unparseable.
+  double? get enteredOrderValue {
+    final t = normalizeDigits(orderValueCtrl.text.trim()).replaceAll('٫', '.');
+    return t.isEmpty ? null : double.tryParse(t);
+  }
+
+  /// Appended to `discountNote` when the saved total differs from the
+  /// computed one, so reports and the order details explain the gap.
+  static final _manualValueNote =
+      RegExp(r'(\s·\s)?قيمة مُعدّلة يدوياً: [\d.]+ بدل [\d.]+');
+
+  void _syncOrderValue() {
+    if (orderValueManual) return;
+    orderValueCtrl.text =
+        hasPricedItems ? computedOrderValue.toStringAsFixed(2) : '';
+  }
+
+  /// Called from the field's onChanged (user edits only).
+  void onOrderValueEdited() {
+    if (orderValueManual) return;
+    orderValueManual = true;
+    emit(OrderFormChanged());
+  }
+
+  void resetOrderValue() {
+    orderValueManual = false;
+    _syncOrderValue();
+    emit(OrderFormChanged());
+  }
 
   /// "العميل وافق على تلقي العروض" switch on the new-order form. Only for
   /// when the customer agreed verbally; OFF never revokes an earlier consent.
@@ -83,7 +224,17 @@ class OrderCubit extends Cubit<OrderState> {
   // Create/edit order form
   // ---------------------------------------------------------------------
 
-  void addItem(PickResult pick, int quantity) {
+  /// [unitPrice] defaults (in the picker) to the product's effective price
+  /// — sale price or running promotion, shared rule — and the owner may edit
+  /// it. [promoId]/[promoName] are set only when that promotion price was kept.
+  void addItem(
+    PickResult pick,
+    int quantity, {
+    double? unitPrice,
+    double? originalPrice,
+    String? promoId,
+    String? promoName,
+  }) {
     selectedItems.add(
       OrderItem(
         itemId: _db.collection('_').doc().id,
@@ -95,14 +246,20 @@ class OrderCubit extends Cubit<OrderState> {
         quantity: quantity,
         qrCode: '',
         isPrimary: selectedItems.isEmpty,
+        unitPrice: unitPrice,
+        originalPrice: originalPrice,
+        promoId: promoId,
+        promoName: promoName,
       ),
     );
+    _syncOrderValue();
     emit(OrderFormChanged());
   }
 
   void removeItem(int index) {
     if (index < 0 || index >= selectedItems.length) return;
     selectedItems.removeAt(index);
+    _syncOrderValue();
     emit(OrderFormChanged());
   }
 
@@ -119,6 +276,8 @@ class OrderCubit extends Cubit<OrderState> {
     qrCodeCtrl.clear();
     selectedItems.clear();
     marketingConsent = false;
+    orderValueManual = false;
+    orderValueCtrl.clear();
     emit(OrderFormChanged());
   }
 
@@ -129,17 +288,39 @@ class OrderCubit extends Cubit<OrderState> {
     addressCtrl.text = orderModel.address;
     areaCtrl.text = orderModel.area;
     streetCtrl.text = orderModel.street;
-    discountNoteCtrl.text = orderModel.discountNote;
+    // The manual-value note is regenerated on save; don't show it as text.
+    discountNoteCtrl.text =
+        orderModel.discountNote.replaceAll(_manualValueNote, '').trim();
     destinationCtrl.text = orderModel.destination;
     deliveryDateCtrl.text = orderModel.deliveryDate;
     qrCodeCtrl.text = orderModel.qrCode.isNotEmpty ? orderModel.qrCode.first : '';
     selectedItems
       ..clear()
       ..addAll(orderModel.items);
+    final total = orderModel.total;
+    orderValueManual =
+        total != null && roundMoney(total) != computedOrderValue;
+    if (orderValueManual) {
+      orderValueCtrl.text = total!.toStringAsFixed(2);
+    } else {
+      orderValueCtrl.clear();
+      _syncOrderValue();
+    }
     emit(OrderFormChanged());
   }
 
   OrderModel _buildOrder({required String id}) {
+    // Order value: `total` = the field; `subtotal` = the items sum. A manual
+    // value that differs from the computed one is explained in discountNote.
+    final entered = enteredOrderValue;
+    final total = entered == null ? editingOrder?.total : roundMoney(entered);
+    final computed = computedOrderValue;
+    var note = discountNoteCtrl.text.trim().replaceAll(_manualValueNote, '').trim();
+    if (orderValueManual && total != null && total != computed) {
+      final manual =
+          'قيمة مُعدّلة يدوياً: ${total.toStringAsFixed(2)} بدل ${computed.toStringAsFixed(2)}';
+      note = note.isEmpty ? manual : '$note · $manual';
+    }
     return OrderModel(
       id: id,
       customerName: customerNameCtrl.text.trim(),
@@ -152,7 +333,7 @@ class OrderCubit extends Cubit<OrderState> {
       address: addressCtrl.text.trim(),
       area: areaCtrl.text.trim(),
       street: streetCtrl.text.trim(),
-      discountNote: discountNoteCtrl.text.trim(),
+      discountNote: note,
       items: List.of(selectedItems),
       qrCode: qrCodeCtrl.text.trim().isNotEmpty
           ? [qrCodeCtrl.text.trim()]
@@ -161,12 +342,13 @@ class OrderCubit extends Cubit<OrderState> {
       status: editingOrder?.status ?? OrderStatus.pending,
       deliveryDate: deliveryDateCtrl.text.trim(),
       source: editingOrder?.source ?? 'manual',
-      // Money fields are owned by the storefront function; carry them through
-      // an owner edit unchanged (null for manual orders).
-      subtotal: editingOrder?.subtotal,
+      // Cart-discount fields stay as the storefront wrote them. subtotal/total
+      // come from the items and the "قيمة الطلب" field (unchanged when the
+      // items carry no prices and the field is empty, e.g. old manual orders).
+      subtotal: hasPricedItems ? itemsSubtotal : editingOrder?.subtotal,
       cartDiscountAmount: editingOrder?.cartDiscountAmount,
       cartDiscountTierMinQuantity: editingOrder?.cartDiscountTierMinQuantity,
-      total: editingOrder?.total,
+      total: total,
     );
   }
 
@@ -183,6 +365,12 @@ class OrderCubit extends Cubit<OrderState> {
     }
     if (selectedItems.isEmpty) {
       emit(OrderError('أضف قطعة واحدة على الأقل للطلب.'));
+      return;
+    }
+    final value = enteredOrderValue;
+    final valueRequired = hasPricedItems || orderValueCtrl.text.trim().isNotEmpty;
+    if (valueRequired && (value == null || value <= 0)) {
+      emit(OrderError('أدخل قيمة طلب صحيحة أكبر من صفر.'));
       return;
     }
 
@@ -220,8 +408,10 @@ class OrderCubit extends Cubit<OrderState> {
           final customerSnap =
               customerRef == null ? null : await tx.get(customerRef);
 
+          // Validate every variant against the live stock BEFORE any write,
+          // then write. Any shortage aborts the whole transaction.
+          final Map<String, Map<String, dynamic>> newStock = {};
           for (final productId in need.keys) {
-            final ref = _db.collection('products').doc(productId);
             final data = productData[productId]!;
             final stock = Map<String, dynamic>.from(data['stock'] as Map? ?? {});
 
@@ -232,17 +422,23 @@ class OrderCubit extends Cubit<OrderState> {
                 final current = (colorMap[sizeEntry.key] as num?)?.toInt() ?? 0;
                 final remaining = current - sizeEntry.value;
                 if (remaining < 0) {
-                  throw Exception(
-                    'الكمية غير كافية للمنتج (${data['name']}) - $color - ${sizeEntry.key}.',
+                  throw StockShortageException(
+                    name: '${data['name'] ?? productId}',
+                    color: color,
+                    size: sizeEntry.key,
+                    available: current < 0 ? 0 : current,
                   );
                 }
                 colorMap[sizeEntry.key] = remaining;
               }
               stock[color] = colorMap;
             }
+            newStock[productId] = stock;
+          }
 
-            tx.update(ref, {
-              'stock': stock,
+          for (final entry in newStock.entries) {
+            tx.update(_db.collection('products').doc(entry.key), {
+              'stock': entry.value,
               'updatedAt': DateTime.now().toIso8601String(),
             });
           }
@@ -344,8 +540,18 @@ class OrderCubit extends Cubit<OrderState> {
                 final current = (colorMap[sizeEntry.key] as num?)?.toInt() ?? 0;
                 final remaining = current - sizeEntry.value; // subtract delta
                 if (remaining < 0) {
-                  throw Exception(
-                    'الكمية غير كافية للمنتج (${data['name']}) - $color - ${sizeEntry.key}.',
+                  final held = storedOrder.items
+                      .where((i) =>
+                          i.productId == productId &&
+                          i.color == color &&
+                          i.size == sizeEntry.key)
+                      .fold<int>(0, (n, i) => n + i.quantity);
+                  final available = current + held;
+                  throw StockShortageException(
+                    name: '${data['name'] ?? productId}',
+                    color: color,
+                    size: sizeEntry.key,
+                    available: available < 0 ? 0 : available,
                   );
                 }
                 colorMap[sizeEntry.key] = remaining;
@@ -374,6 +580,9 @@ class OrderCubit extends Cubit<OrderState> {
 
       clearForm();
       emit(OrderSuccess('تم حفظ الطلب بنجاح.'));
+    } on StockShortageException catch (e) {
+      // The form (and its items) is kept so the owner can adjust.
+      emit(OrderError(e.message, isStockShortage: true));
     } catch (e) {
       emit(OrderError(e.toString()));
     }
@@ -692,6 +901,7 @@ class OrderCubit extends Cubit<OrderState> {
     destinationCtrl.dispose();
     deliveryDateCtrl.dispose();
     qrCodeCtrl.dispose();
+    orderValueCtrl.dispose();
     return super.close();
   }
 }

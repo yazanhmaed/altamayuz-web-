@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'analytics.dart';
+import 'data/promotions_repository.dart';
 import 'firebase_options.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
@@ -14,6 +15,9 @@ Future<void> main() async {
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Product-group promotions: one read now, then a cached refresh every few
+  // minutes. Not awaited — prices update in place when it lands.
+  promotionsRepository.start();
 
   // No Flutter Web implementation of Firebase Crashlytics exists yet, so
   // uncaught errors are reported as Analytics events instead — the closest

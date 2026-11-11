@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../data/promotions_repository.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 
@@ -171,7 +172,8 @@ class _ImagePlaceholder extends StatelessWidget {
 
 /// Renders a product's price: a single accent-coloured figure normally, or a
 /// struck-through original next to a bold [AppColors.danger] sale figure when
-/// [PublicProductModel.isOnSale] is true.
+/// [PublicProductModel.isOnSale] is true (a sale price or a running
+/// promotion — see [PublicProductModel.pricing]).
 class PriceDisplay extends StatelessWidget {
   final PublicProductModel product;
   final double fontSize;
@@ -192,6 +194,14 @@ class PriceDisplay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild when a promotion starts/ends or the cached list refreshes.
+    return ListenableBuilder(
+      listenable: promotionsRepository,
+      builder: (context, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     if (!product.isOnSale) {
       return Text(
         _fmt(product.price),

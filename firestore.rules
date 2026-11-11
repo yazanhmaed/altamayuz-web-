@@ -16,6 +16,14 @@ service cloud.firestore {
       allow write: if isOwner();
     }
 
+    // Product-group promotions (name, percent, product IDs, dates). Public
+    // read: the storefront prices products with them and nothing in a
+    // promotion is sensitive. The server re-reads them on every order.
+    match /promotions/{id} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
     // Orders are created only by the submitPublicOrder Cloud Function (Admin
     // SDK) or the owner. No client — storefront included — writes here directly.
     match /orders/{orderId} {

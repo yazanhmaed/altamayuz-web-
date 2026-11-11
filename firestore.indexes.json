@@ -1,6 +1,15 @@
 {
   "indexes": [
     {
+      "collectionGroup": "promotions",
+      "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "endAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "orders",
       "queryScope": "COLLECTION",
       "density": "SPARSE_ALL",
@@ -30,6 +39,7 @@
     {
       "collectionGroup": "orders",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "customerPhone", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
@@ -38,6 +48,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "ordersCount", "order": "ASCENDING" },
         { "fieldPath": "lastOrderAt", "order": "DESCENDING" }
@@ -46,6 +57,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "ordersCount", "order": "ASCENDING" },
         { "fieldPath": "totalOrdersValue", "order": "DESCENDING" }
@@ -54,6 +66,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "marketingConsent", "order": "ASCENDING" },
         { "fieldPath": "lastOrderAt", "order": "DESCENDING" }
@@ -62,6 +75,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "marketingConsent", "order": "ASCENDING" },
         { "fieldPath": "ordersCount", "order": "DESCENDING" }
@@ -70,6 +84,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "marketingConsent", "order": "ASCENDING" },
         { "fieldPath": "totalOrdersValue", "order": "DESCENDING" }
@@ -78,6 +93,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "lastOrderAt", "order": "DESCENDING" },
         { "fieldPath": "ordersCount", "order": "DESCENDING" }
@@ -86,6 +102,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "totalOrdersValue", "order": "DESCENDING" },
         { "fieldPath": "ordersCount", "order": "DESCENDING" }
@@ -94,6 +111,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "lastOrderAt", "order": "DESCENDING" },
         { "fieldPath": "deliveredValue", "order": "DESCENDING" }
@@ -102,6 +120,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "ordersCount", "order": "DESCENDING" },
         { "fieldPath": "deliveredValue", "order": "DESCENDING" }
@@ -110,6 +129,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "totalOrdersValue", "order": "DESCENDING" },
         { "fieldPath": "deliveredValue", "order": "DESCENDING" }
@@ -118,6 +138,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "ordersCount", "order": "DESCENDING" },
         { "fieldPath": "lastOrderAt", "order": "DESCENDING" }
@@ -126,6 +147,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "totalOrdersValue", "order": "DESCENDING" },
         { "fieldPath": "lastOrderAt", "order": "DESCENDING" }
@@ -134,6 +156,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "lastOrderAt", "order": "DESCENDING" },
         { "fieldPath": "returnedCount", "order": "DESCENDING" }
@@ -142,6 +165,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "ordersCount", "order": "DESCENDING" },
         { "fieldPath": "returnedCount", "order": "DESCENDING" }
@@ -150,6 +174,7 @@
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
+      "density": "SPARSE_ALL",
       "fields": [
         { "fieldPath": "totalOrdersValue", "order": "DESCENDING" },
         { "fieldPath": "returnedCount", "order": "DESCENDING" }

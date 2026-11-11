@@ -12,6 +12,7 @@ import 'cubit/customers/customers_cubit.dart';
 import 'cubit/dashboard/dashboard_cubit.dart';
 import 'cubit/inventory/inventory_cubit.dart';
 import 'cubit/order/order_cubit.dart';
+import 'cubit/promotions/promotions_cubit.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -122,6 +123,7 @@ class _SignedInAppState extends State<_SignedInApp> {
         BlocProvider(create: (_) => OrderCubit()),
         BlocProvider(create: (_) => DashboardCubit()),
         BlocProvider(create: (_) => CustomersCubit()),
+        BlocProvider(create: (_) => PromotionsCubit()),
       ],
       child: _buildApp(home: const HomeScreen()),
     );

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../cubit/order/order_cubit.dart';
@@ -118,22 +118,35 @@ class _OrderTotals extends StatelessWidget {
   }
 }
 
+Color orderStatusColor(OrderStatus status) {
+  switch (status) {
+    case OrderStatus.pending:
+      return Colors.orange.shade800;
+    case OrderStatus.shipped:
+      return Colors.blue.shade700;
+    case OrderStatus.completed:
+      return Colors.green.shade700;
+    case OrderStatus.returned:
+      return Colors.red.shade700;
+  }
+}
+
+Future<void> _openWhatsApp(BuildContext context, OrderModel order) async {
+  final uri = Uri.parse(_buildWhatsAppConfirmationUrl(order));
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } else if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تعذر فتح واتساب.')),
+    );
+  }
+}
+
 class OrderCard extends StatelessWidget {
   final OrderModel order;
   const OrderCard({super.key, required this.order});
 
-  Color _statusColor(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pending:
-        return Colors.orange.shade800;
-      case OrderStatus.shipped:
-        return Colors.blue.shade700;
-      case OrderStatus.completed:
-        return Colors.green.shade700;
-      case OrderStatus.returned:
-        return Colors.red.shade700;
-    }
-  }
+  Color _statusColor(OrderStatus status) => orderStatusColor(status);
 
   @override
   Widget build(BuildContext context) {
@@ -252,16 +265,7 @@ class OrderCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: () async {
-                      final uri = Uri.parse(_buildWhatsAppConfirmationUrl(order));
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      } else if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تعذر فتح واتساب.')),
-                        );
-                      }
-                    },
+                    onPressed: () => _openWhatsApp(context, order),
                     icon: const Icon(Icons.chat_outlined, size: 18),
                     label: const Text('تأكيد عبر واتساب'),
                   ),
@@ -567,9 +571,16 @@ class _OrderItemsListState extends State<_OrderItemsList> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    '${item.productName ?? item.productId} — ${item.color} (مقاس ${item.size}) × ${item.quantity}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${item.productName ?? item.productId} — ${item.color} (مقاس ${item.size}) × ${item.quantity}',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                      if (item.promoName != null && item.unitPrice != null)
+                        _PromoPriceLine(item: item),
+                    ],
                   ),
                 ),
                 if (item.status == ItemStatus.pending) ...[
@@ -636,6 +647,291 @@ class _OrderItemsListState extends State<_OrderItemsList> {
             ),
           ),
       ],
+    );
+  }
+}
+/// Price line for an item priced by a promotion: original struck through,
+/// final unit price, and a chip with the promotion name.
+class _PromoPriceLine extends StatelessWidget {
+  final OrderItem item;
+  const _PromoPriceLine({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final original = item.originalPrice;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (original != null && original > item.unitPrice!)
+            Text(
+              _money(original),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                decoration: TextDecoration.lineThrough,
+              ),
+            ),
+          Text(
+            _money(item.unitPrice!),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.red.shade700,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.local_offer_outlined, size: 12, color: Colors.red.shade700),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    item.promoName!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: Colors.red.shade700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const _statusLabels = {
+  OrderStatus.pending: 'معلّق',
+  OrderStatus.shipped: 'مشحون',
+  OrderStatus.completed: 'مكتمل',
+  OrderStatus.returned: 'مرتجع',
+};
+
+/// Fixed height of an [OrderSummaryCard] at text scale 1. The card's content
+/// is all single-line (ellipsis), so it fits at any width; [Spacer] absorbs
+/// the slack.
+const double kOrderSummaryCardHeight = 236;
+
+/// Compact order summary for the wide-screen grid: id, customer, phone,
+/// place, date, items preview, total, status, source, discount badge, and
+/// small WhatsApp/QR actions. Tapping opens the full [OrderCard].
+class OrderSummaryCard extends StatefulWidget {
+  final OrderModel order;
+  final VoidCallback onTap;
+  const OrderSummaryCard({super.key, required this.order, required this.onTap});
+
+  @override
+  State<OrderSummaryCard> createState() => _OrderSummaryCardState();
+}
+
+class _OrderSummaryCardState extends State<OrderSummaryCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final order = widget.order;
+    final color = orderStatusColor(order.status);
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final hasDiscount = order.hasCartDiscount ||
+        order.discountNote.isNotEmpty ||
+        order.items.any((i) => i.promoName != null);
+    final shortId = order.id.length > 6 ? order.id.substring(0, 6) : order.id;
+    final place = [order.address, order.area]
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .join(' - ');
+    final first = order.items.isEmpty
+        ? null
+        : (order.items.first.productName ?? order.items.first.productId);
+    final pieces = order.items.fold<int>(0, (n, i) => n + i.quantity);
+
+    Widget infoLine(IconData icon, Widget text) => Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(child: text),
+            ],
+          ),
+        );
+
+    Widget badge(String text, Color fg, Color bg) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: fg),
+          ),
+        );
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Material(
+        color: theme.colorScheme.surface,
+        elevation: _hover ? 4 : 0,
+        shadowColor: Colors.black26,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+        ),
+        child: InkWell(
+          onTap: widget.onTap,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Status strip on the leading (right, in RTL) edge.
+              Container(width: 5, color: color),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 12, 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          badge(_statusLabels[order.status]!, color,
+                              color.withValues(alpha: 0.12)),
+                          const SizedBox(width: 6),
+                          badge(
+                            order.source == 'storefront' ? 'موقع' : 'يدوي',
+                            theme.colorScheme.onSecondaryContainer,
+                            theme.colorScheme.secondaryContainer,
+                          ),
+                          if (hasDiscount) ...[
+                            const SizedBox(width: 6),
+                            badge('خصم', Colors.red.shade700, Colors.red.shade50),
+                          ],
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '#${shortId.toUpperCase()}',
+                              textAlign: TextAlign.end,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.fade,
+                              style: muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        order.customerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      infoLine(
+                        Icons.phone_outlined,
+                        Text(
+                          _localPhone(order.customerPhone),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.start,
+                          style: muted,
+                        ),
+                      ),
+                      infoLine(
+                        Icons.location_on_outlined,
+                        Text(place.isEmpty ? '—' : place,
+                            maxLines: 1, overflow: TextOverflow.ellipsis, style: muted),
+                      ),
+                      infoLine(
+                        Icons.schedule,
+                        Text(
+                          DateFormat('d MMM yyyy — h:mm a', 'ar').format(order.createdAt),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: muted,
+                        ),
+                      ),
+                      infoLine(
+                        Icons.shopping_bag_outlined,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(first ?? 'لا توجد قطع',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: muted),
+                            ),
+                            Flexible(
+                              child: Text(
+                                '${order.items.length > 1 ? ' +${order.items.length - 1} أصناف' : ''} · $pieces قطعة',
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                style: muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      const Divider(height: 1),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              order.total != null ? _money(order.total!) : '—',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'تأكيد عبر واتساب',
+                            visualDensity: VisualDensity.compact,
+                            iconSize: 20,
+                            color: const Color(0xFF25D366),
+                            icon: const Icon(Icons.chat_outlined),
+                            onPressed: () => _openWhatsApp(context, order),
+                          ),
+                          IconButton(
+                            tooltip: 'QR',
+                            visualDensity: VisualDensity.compact,
+                            iconSize: 20,
+                            icon: const Icon(Icons.qr_code_scanner),
+                            onPressed: () => context
+                                .read<OrderCubit>()
+                                .updateOrderQrCode(order: order, context: context),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

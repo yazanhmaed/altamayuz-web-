@@ -24,5 +24,9 @@ class OrderSuccess extends OrderState {
 
 class OrderError extends OrderState {
   final String message;
-  OrderError(this.message);
+
+  /// True when the save failed because live stock was too low; the screen
+  /// then refreshes stock and trims the lines.
+  final bool isStockShortage;
+  OrderError(this.message, {this.isStockShortage = false});
 }

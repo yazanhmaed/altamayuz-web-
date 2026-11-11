@@ -33,9 +33,17 @@ class OrderItem {
   final String itemId;
   ItemStatus status;
 
-  /// Per-unit price set by the storefront function (null for manual orders).
-  /// Carried through so an owner edit doesn't erase it.
+  /// Per-unit price actually charged: set by the storefront function, or
+  /// defaulted to the effective price when the owner adds an item to a manual
+  /// order (null on older manual orders). Carried through owner edits.
   final double? unitPrice;
+
+  /// The product's regular `price` when the item was ordered (optional).
+  final double? originalPrice;
+
+  /// The promotion that set [unitPrice], when one won (optional).
+  final String? promoId;
+  final String? promoName;
 
   OrderItem({
     required this.productId,
@@ -49,6 +57,9 @@ class OrderItem {
     required this.itemId,
     this.status = ItemStatus.pending,
     this.unitPrice,
+    this.originalPrice,
+    this.promoId,
+    this.promoName,
   });
 
   OrderItem copyWith({
@@ -75,6 +86,9 @@ class OrderItem {
       itemId: itemId ?? this.itemId,
       status: status ?? this.status,
       unitPrice: unitPrice,
+      originalPrice: originalPrice,
+      promoId: promoId,
+      promoName: promoName,
     );
   }
 
@@ -90,6 +104,9 @@ class OrderItem {
     'isPrimary': isPrimary,
     'status': status.englishName,
     if (unitPrice != null) 'unitPrice': unitPrice,
+    if (originalPrice != null) 'originalPrice': originalPrice,
+    if (promoId != null) 'promoId': promoId,
+    if (promoName != null) 'promoName': promoName,
   };
 
   factory OrderItem.fromMap(Map<String, dynamic> map) {
@@ -108,6 +125,9 @@ class OrderItem {
         orElse: () => ItemStatus.pending,
       ),
       unitPrice: (map['unitPrice'] as num?)?.toDouble(),
+      originalPrice: (map['originalPrice'] as num?)?.toDouble(),
+      promoId: map['promoId'] is String ? map['promoId'] as String : null,
+      promoName: map['promoName'] is String ? map['promoName'] as String : null,
     );
   }
 }

@@ -8,6 +8,8 @@ import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/cart_discount_banner.dart';
+import '../widgets/promotion_banner.dart';
+import '../data/promotions_repository.dart';
 import '../widgets/category_card.dart';
 import '../widgets/product_card.dart';
 import '../widgets/store_footer.dart';
@@ -42,10 +44,18 @@ class _StoreHomePageState extends State<StoreHomePage> {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
     _loadNextPage(); // first page
+    // Promotions change which products are discounted: re-derive the offers
+    // section (and every card's price) when one starts/ends or refreshes.
+    promotionsRepository.addListener(_onPromotionsChanged);
+  }
+
+  void _onPromotionsChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    promotionsRepository.removeListener(_onPromotionsChanged);
     _searchCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -210,6 +220,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                 : _gridItems;
             final featured =
                 all.where((p) => p.isFeatured && p.isAvailable).toList();
+            // On sale = a sale price or a running promotion (shared rule).
             final offers =
                 all.where((p) => p.isOnSale && p.isAvailable).toList();
             // One entry per category, with a product count and the first
@@ -237,6 +248,9 @@ class _StoreHomePageState extends State<StoreHomePage> {
                       // Cart-wide quantity-discount promo. Self-hiding: renders
                       // nothing when no tiers are configured (no gap, no flicker).
                       const SliverToBoxAdapter(child: CartDiscountBanner()),
+                      // Product-group promotion strip (only when exactly one
+                      // is running). Self-hiding like the bar above.
+                      const SliverToBoxAdapter(child: PromotionBanner()),
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),

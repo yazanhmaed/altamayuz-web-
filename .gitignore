@@ -10,6 +10,7 @@
 # Firebase / Node
 functions/node_modules/
 functions/lib/
+functions/lib-test/
 firebase-debug.log
 firebase-debug.*.log
 .firebase/

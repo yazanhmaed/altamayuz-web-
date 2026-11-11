@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../data/promotions_repository.dart';
 import '../models/public_product_model.dart';
 import '../theme/app_theme.dart';
 import 'ui_helpers.dart';
@@ -39,12 +40,17 @@ class ProductCard extends StatelessWidget {
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold)),
                       ),
-                    if (product.isOnSale)
-                      Positioned(
-                        top: 8,
-                        left: 8,
-                        child: DiscountBadge(percent: product.discountPercent),
+                    // Rebuilds when a promotion starts/ends.
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: ListenableBuilder(
+                        listenable: promotionsRepository,
+                        builder: (context, _) => product.isOnSale
+                            ? DiscountBadge(percent: product.discountPercent)
+                            : const SizedBox.shrink(),
                       ),
+                    ),
                   ],
                 ),
               ),

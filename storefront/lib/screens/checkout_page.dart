@@ -7,10 +7,12 @@ import '../analytics.dart';
 import '../cart/cart_controller.dart';
 import '../config/jordan_governorates.dart';
 import '../data/cart_discount_repository.dart';
+import '../data/promotions_repository.dart';
 import '../models/cart_discount.dart';
 import '../utils/arabic_digits.dart';
 import '../utils/jordan_phone.dart';
 import '../utils/responsive.dart';
+import '../widgets/prices_updated_note.dart';
 import '../widgets/ui_helpers.dart';
 import 'order_success_page.dart';
 
@@ -55,9 +57,27 @@ class _CheckoutPageState extends State<CheckoutPage> {
         subtotal: _total,
       );
 
+  /// Unit prices when the page opened, by line key. A promotion starting or
+  /// ending while the customer is here re-prices the lines and shows a note.
+  late final Map<String, double> _openedPrices = {
+    for (final l in _items) l.key: l.product.effectivePrice,
+  };
+  bool _pricesChanged = false;
+
+  void _onPromotionsChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_items.any((l) => _openedPrices[l.key] != l.product.effectivePrice)) {
+        _pricesChanged = true;
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    _openedPrices; // capture now, before any promotion change
+    promotionsRepository.addListener(_onPromotionsChanged);
     loadCartDiscountTiers().then((tiers) {
       if (mounted) setState(() => _tiers = tiers);
     }).catchError((_) {
@@ -72,6 +92,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   @override
   void dispose() {
+    promotionsRepository.removeListener(_onPromotionsChanged);
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _areaCtrl.dispose();
@@ -110,6 +131,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   itemId: l.product.id,
                   itemName: l.product.name,
                   quantity: l.quantity,
+                  promotionId: l.product.activePromotion?.id,
+                  promotionName: l.product.activePromotion?.name,
                 ))
             .toList(),
       );
@@ -193,6 +216,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 16),
+          if (_pricesChanged)
+            PricesUpdatedNote(
+              margin: const EdgeInsets.only(bottom: 12),
+              onDismiss: () => setState(() => _pricesChanged = false),
+            ),
 
           // Items List
           ListView.separated(
