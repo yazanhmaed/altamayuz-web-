@@ -8,6 +8,7 @@ import '../../../cubit/order/order_cubit.dart';
 import '../../../data/order/order_model.dart';
 import '../../../utils/clipboard.dart';
 import '../../../utils/jordan_phone.dart';
+import '../create_order.dart';
 
 String _money(double v) => '${v.toStringAsFixed(2)} د.أ';
 
@@ -27,7 +28,8 @@ String _buildWhatsAppConfirmationUrl(OrderModel order) {
     ..writeln()
     ..writeln('📍 العنوان: ${order.address} - ${order.area}');
   if (order.street.isNotEmpty) buffer.writeln(order.street);
-  if (order.discountNote.isNotEmpty) buffer.writeln('🏷️ ${order.discountNote}');
+  if (order.discountNote.isNotEmpty)
+    buffer.writeln('🏷️ ${order.discountNote}');
   if (order.total != null) {
     buffer.writeln('💰 الإجمالي: ${order.total!.toStringAsFixed(2)} د.أ');
   }
@@ -57,7 +59,8 @@ class _OrderTotals extends StatelessWidget {
           children: [
             Text(
               'الإجمالي النهائي',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             Text(
               _money(order.total ?? 0),
@@ -71,8 +74,11 @@ class _OrderTotals extends StatelessWidget {
       );
     }
 
-    final subtotal = order.subtotal ?? ((order.total ?? 0) + order.cartDiscountAmount!);
-    Widget line(String label, String value, {bool bold = false, Color? color}) => Padding(
+    final subtotal =
+        order.subtotal ?? ((order.total ?? 0) + order.cartDiscountAmount!);
+    Widget line(String label, String value,
+            {bool bold = false, Color? color}) =>
+        Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -99,7 +105,7 @@ class _OrderTotals extends StatelessWidget {
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -142,6 +148,126 @@ Future<void> _openWhatsApp(BuildContext context, OrderModel order) async {
   }
 }
 
+bool _openingEdit = false;
+
+/// "تعديل": re-reads the order, prefills the order form with it and opens it.
+Future<void> _openEdit(BuildContext context, OrderModel order) async {
+  if (_openingEdit) return;
+  _openingEdit = true;
+  final cubit = context.read<OrderCubit>();
+  final messenger = ScaffoldMessenger.of(context);
+  final navigator = Navigator.of(context);
+  try {
+    await cubit.startEditing(order);
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('تعذّر فتح الطلب: $e')));
+    return;
+  } finally {
+    _openingEdit = false;
+  }
+  navigator.push(MaterialPageRoute(builder: (_) => const CreateOrderScreen()));
+}
+
+const _editFieldLabels = {
+  'customerName': 'الاسم',
+  'customerPhone': 'الهاتف',
+  'address': 'المحافظة',
+  'area': 'المنطقة',
+  'street': 'العنوان',
+  'discountNote': 'الملاحظة',
+  'destination': 'الوجهة',
+  'deliveryDate': 'تاريخ التسليم',
+  'qrCode': 'الباركود',
+  'total': 'القيمة',
+  'items': 'الأصناف',
+};
+
+String _editDate(DateTime at) =>
+    DateFormat('d MMM yyyy — h:mm a', 'ar').format(at);
+
+/// "آخر تعديل" line with a button that lists the order's edit history.
+class _LastEditLine extends StatelessWidget {
+  final OrderModel order;
+  const _LastEditLine({required this.order});
+
+  void _showHistory(BuildContext context) {
+    final entries = order.editHistory.reversed.toList();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('سجل التعديلات'),
+        content: SizedBox(
+          width: 360,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: entries.length,
+            separatorBuilder: (_, __) => const Divider(height: 12),
+            itemBuilder: (context, i) {
+              final e = entries[i];
+              String money(double? v) => v == null ? '—' : _money(v);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${_editDate(e.at)} · ${e.by}',
+                      style: Theme.of(context).textTheme.bodySmall),
+                  const SizedBox(height: 2),
+                  Text(
+                      e.fields.map((f) => _editFieldLabels[f] ?? f).join('، ')),
+                  if (e.fields.contains('items'))
+                    Text('الأصناف: ${e.itemsBefore} ← ${e.itemsAfter}',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  if (e.fields.contains('total') ||
+                      e.totalBefore != e.totalAfter)
+                    Text(
+                        'القيمة: ${money(e.totalBefore)} ← ${money(e.totalAfter)}',
+                        style: Theme.of(context).textTheme.bodySmall),
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final last = order.editHistory.last;
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return Row(
+      children: [
+        Icon(Icons.history,
+            size: 14, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            'آخر تعديل: ${_editDate(last.at)} · ${last.by}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: muted,
+          ),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          onPressed: () => _showHistory(context),
+          child: const Text('السجل'),
+        ),
+      ],
+    );
+  }
+}
+
 class OrderCard extends StatelessWidget {
   final OrderModel order;
   const OrderCard({super.key, required this.order});
@@ -158,7 +284,8 @@ class OrderCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.6)),
+        side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withOpacity(0.6)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -170,7 +297,8 @@ class OrderCard extends StatelessWidget {
               children: [
                 if (order.source == 'storefront')
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(20),
@@ -179,7 +307,8 @@ class OrderCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.storefront_outlined,
-                            size: 14, color: theme.colorScheme.onPrimaryContainer),
+                            size: 14,
+                            color: theme.colorScheme.onPrimaryContainer),
                         const SizedBox(width: 4),
                         Text(
                           'طلب متجر',
@@ -193,12 +322,22 @@ class OrderCard extends StatelessWidget {
                     ),
                   ),
                 const Spacer(),
+                IconButton(
+                  tooltip: 'تعديل',
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 20,
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => _openEdit(context, order),
+                ),
+                const SizedBox(width: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
                     color: _statusColor(order.status).withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _statusColor(order.status).withOpacity(0.4)),
+                    border: Border.all(
+                        color: _statusColor(order.status).withOpacity(0.4)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -225,6 +364,10 @@ class OrderCard extends StatelessWidget {
 
             // 2. Customer Info
             _CustomerInfo(order: order),
+            if (order.editHistory.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              _LastEditLine(order: order),
+            ],
 
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
@@ -273,12 +416,14 @@ class OrderCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 10, horizontal: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  onPressed: () => cubit.updateOrderQrCode(order: order, context: context),
+                  onPressed: () =>
+                      cubit.updateOrderQrCode(order: order, context: context),
                   icon: const Icon(Icons.qr_code_scanner, size: 18),
                   label: const Text('QR'),
                 ),
@@ -292,7 +437,8 @@ class OrderCard extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.2),
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: theme.colorScheme.outlineVariant.withOpacity(0.4),
@@ -355,13 +501,15 @@ String _localPhone(String stored) {
 
 /// International form (+9627XXXXXXXX), Latin digits only.
 String _internationalPhone(String stored) =>
-    normalizePhoneE164(stored) ?? toAsciiDigits(stored).replaceAll(RegExp(r'[^0-9+]'), '');
+    normalizePhoneE164(stored) ??
+    toAsciiDigits(stored).replaceAll(RegExp(r'[^0-9+]'), '');
 
 /// "المحافظة - المنطقة - الشارع", skipping empty parts.
-String _addressLine(OrderModel order) => [order.address, order.area, order.street]
-    .map((p) => p.trim())
-    .where((p) => p.isNotEmpty)
-    .join(' - ');
+String _addressLine(OrderModel order) => [
+      order.address,
+      order.area,
+      order.street
+    ].map((p) => p.trim()).where((p) => p.isNotEmpty).join(' - ');
 
 String _customerBlock(OrderModel order) => [
       'الاسم: ${order.customerName.trim()}',
@@ -422,7 +570,8 @@ class _CustomerInfo extends StatelessWidget {
         ),
         Row(
           children: [
-            Icon(Icons.phone_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant),
+            Icon(Icons.phone_outlined,
+                size: 14, color: theme.colorScheme.onSurfaceVariant),
             const SizedBox(width: 4),
             Flexible(
               child: GestureDetector(
@@ -447,6 +596,22 @@ class _CustomerInfo extends StatelessWidget {
             ),
           ],
         ),
+        if (order.qrCode.isNotEmpty) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.qr_code_2_outlined,
+                  size: 14, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  '${order.qrCode.firstOrNull}',
+                  style: mutedStyle,
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
 
@@ -468,11 +633,13 @@ class _CustomerInfo extends StatelessWidget {
           onSelected: (action) {
             switch (action) {
               case _CopyAction.international:
-                copyToClipboard(context, _internationalPhone(order.customerPhone), 'الرقم الدولي');
+                copyToClipboard(context,
+                    _internationalPhone(order.customerPhone), 'الرقم الدولي');
               case _CopyAction.address:
                 copyToClipboard(context, _addressLine(order), 'العنوان');
               case _CopyAction.all:
-                copyToClipboard(context, _customerBlock(order), 'بيانات العميل');
+                copyToClipboard(
+                    context, _customerBlock(order), 'بيانات العميل');
             }
           },
           itemBuilder: (_) => const [
@@ -566,7 +733,8 @@ class _OrderItemsListState extends State<_OrderItemsList> {
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: theme.colorScheme.outlineVariant.withOpacity(0.4)),
+              border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withOpacity(0.4)),
             ),
             child: Row(
               children: [
@@ -575,8 +743,9 @@ class _OrderItemsListState extends State<_OrderItemsList> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${item.productName ?? item.productId} — ${item.color} (مقاس ${item.size}) × ${item.quantity}',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                        '${item.productName ?? item.productId} — ${item.color} ( مقاس ${item.size} )   × ${item.quantity}',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                       if (item.promoName != null && item.unitPrice != null)
                         _PromoPriceLine(item: item),
@@ -589,7 +758,8 @@ class _OrderItemsListState extends State<_OrderItemsList> {
                         ? null
                         : () => _update(item.itemId, ItemStatus.delivered),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: Colors.green.shade50,
                         borderRadius: BorderRadius.circular(6),
@@ -611,7 +781,8 @@ class _OrderItemsListState extends State<_OrderItemsList> {
                         ? null
                         : () => _update(item.itemId, ItemStatus.returned),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: Colors.red.shade50,
                         borderRadius: BorderRadius.circular(6),
@@ -629,7 +800,8 @@ class _OrderItemsListState extends State<_OrderItemsList> {
                   ),
                 ] else
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: _itemStatusColor(item.status).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
@@ -650,6 +822,7 @@ class _OrderItemsListState extends State<_OrderItemsList> {
     );
   }
 }
+
 /// Price line for an item priced by a promotion: original struck through,
 /// final unit price, and a chip with the promotion name.
 class _PromoPriceLine extends StatelessWidget {
@@ -693,7 +866,8 @@ class _PromoPriceLine extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.local_offer_outlined, size: 12, color: Colors.red.shade700),
+                Icon(Icons.local_offer_outlined,
+                    size: 12, color: Colors.red.shade700),
                 const SizedBox(width: 3),
                 Flexible(
                   child: Text(
@@ -778,7 +952,8 @@ class _OrderSummaryCardState extends State<OrderSummaryCard> {
           ),
           child: Text(
             text,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: fg),
+            style:
+                TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: fg),
           ),
         );
 
@@ -821,7 +996,8 @@ class _OrderSummaryCardState extends State<OrderSummaryCard> {
                           ),
                           if (hasDiscount) ...[
                             const SizedBox(width: 6),
-                            badge('خصم', Colors.red.shade700, Colors.red.shade50),
+                            badge(
+                                'خصم', Colors.red.shade700, Colors.red.shade50),
                           ],
                           const SizedBox(width: 6),
                           Expanded(
@@ -857,12 +1033,15 @@ class _OrderSummaryCardState extends State<OrderSummaryCard> {
                       infoLine(
                         Icons.location_on_outlined,
                         Text(place.isEmpty ? '—' : place,
-                            maxLines: 1, overflow: TextOverflow.ellipsis, style: muted),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: muted),
                       ),
                       infoLine(
                         Icons.schedule,
                         Text(
-                          DateFormat('d MMM yyyy — h:mm a', 'ar').format(order.createdAt),
+                          DateFormat('d MMM yyyy — h:mm a', 'ar')
+                              .format(order.createdAt),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: muted,
@@ -920,7 +1099,8 @@ class _OrderSummaryCardState extends State<OrderSummaryCard> {
                             icon: const Icon(Icons.qr_code_scanner),
                             onPressed: () => context
                                 .read<OrderCubit>()
-                                .updateOrderQrCode(order: order, context: context),
+                                .updateOrderQrCode(
+                                    order: order, context: context),
                           ),
                         ],
                       ),

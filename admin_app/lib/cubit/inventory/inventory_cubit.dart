@@ -59,6 +59,45 @@ class RestockRowControllers {
   }
 }
 
+/// One restock line: add [qty] units to [productId]'s [color]/[size].
+class RestockEntry {
+  final String productId;
+  final String color;
+  final String size;
+  final int qty;
+
+  /// 1-based form line, named in error messages (null outside a form).
+  final int? line;
+
+  const RestockEntry({
+    required this.productId,
+    required this.color,
+    required this.size,
+    required this.qty,
+    this.line,
+  });
+}
+
+/// A variant's live quantity right after a restock was applied.
+class RestockedVariant {
+  final String productId;
+  final String color;
+  final String size;
+  final int quantity;
+  const RestockedVariant(this.productId, this.color, this.size, this.quantity);
+}
+
+/// Aborts the whole restock transaction for a line that can't be applied.
+class RestockException implements Exception {
+  final String message;
+  const RestockException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+String _linePrefix(int? line) => line == null ? '' : 'السطر $line: ';
+
 /// One product parsed from an Excel import, awaiting review before commit.
 /// `existingImageUrls` carries whatever `imageUrls` the product already has
 /// in Firestore (empty if the product is new); `pendingImages` holds any
@@ -140,6 +179,13 @@ class InventoryCubit extends Cubit<InventoryState> {
   // ---- restock-only form state ----
   ProductModel? restockProduct;
   final List<RestockRowControllers> restockRows = [RestockRowControllers()];
+
+  /// True while [applyRestock] runs; a second call (double tap) is ignored.
+  bool isRestocking = false;
+
+  /// Live quantities of the variants touched by the last successful
+  /// [applyRestock] (empty if they couldn't be re-read).
+  List<RestockedVariant> lastRestock = const [];
 
   // ---- Excel import review state ----
   List<PendingImportProduct> pendingImportItems = [];
@@ -577,61 +623,176 @@ class InventoryCubit extends Cubit<InventoryState> {
     emit(InventoryFormChanged());
   }
 
-  Future<void> addStockQuantities({
-    required String productId,
-    required Map<String, Map<String, int>> additions, // color -> size -> qtyToAdd
-  }) async {
-    try {
-      emit(InventoryLoading());
-
-      final Map<String, dynamic> updates = {};
-      additions.forEach((color, sizes) {
-        sizes.forEach((size, qty) {
-          if (qty == 0) return;
-          updates['stock.$color.$size'] = FieldValue.increment(qty);
-        });
-      });
-
-      if (updates.isEmpty) {
-        emit(InventoryError('لم تُدخل أي كمية لإضافتها.'));
+  /// The one code path that adds stock (restock screen, dashboard quick
+  /// restock). Identical product/color/size lines are summed, then ONE
+  /// transaction reads every product, checks each color/size exists, and
+  /// writes exactly one `tx.update()` per product holding all of its
+  /// `stock.<color>.<size>` increments. Any invalid line aborts everything
+  /// (nothing is applied) with a message naming that line.
+  Future<void> applyRestock(List<RestockEntry> entries) async {
+    if (isRestocking) return;
+    if (entries.isEmpty) {
+      emit(InventoryError('لم تُدخل أي كمية لإضافتها.'));
+      return;
+    }
+    for (final e in entries) {
+      if (e.color.trim().isEmpty || e.size.trim().isEmpty) {
+        emit(InventoryError('${_linePrefix(e.line)}اختر اللون والمقاس.'));
         return;
       }
-
-      updates['updatedAt'] = DateTime.now().toIso8601String();
-      await _db.collection('products').doc(productId).update(updates);
-      await reloadSingle(productId);
-
-      for (final r in restockRows) {
-        r.dispose();
+      if (e.qty < 1) {
+        emit(InventoryError('${_linePrefix(e.line)}الكمية يجب أن تكون عددًا صحيحًا من 1 فأكثر.'));
+        return;
       }
-      restockRows
-        ..clear()
-        ..add(RestockRowControllers());
-      restockProduct = null;
-
-      emit(InventorySuccess('تمت إضافة الكمية بنجاح.'));
-    } catch (e) {
-      emit(InventoryError(e.toString()));
     }
+
+    // productId -> color -> size -> summed qty, plus the first line of each
+    // variant for error messages.
+    final Map<String, Map<String, Map<String, int>>> grouped = {};
+    final Map<String, int?> firstLine = {};
+    for (final e in entries) {
+      grouped
+          .putIfAbsent(e.productId, () => {})
+          .putIfAbsent(e.color, () => {})
+          .update(e.size, (q) => q + e.qty, ifAbsent: () => e.qty);
+      firstLine.putIfAbsent('${e.productId}|${e.color}|${e.size}', () => e.line);
+      firstLine.putIfAbsent(e.productId, () => e.line);
+    }
+
+    isRestocking = true;
+    emit(InventoryLoading());
+    try {
+      await _db.runTransaction((tx) async {
+        // ---- reads ----
+        final snaps = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        for (final productId in grouped.keys) {
+          snaps[productId] = await tx.get(_db.collection('products').doc(productId));
+        }
+
+        // ---- validate every line before any write ----
+        for (final productId in grouped.keys) {
+          final snap = snaps[productId]!;
+          if (!snap.exists) {
+            throw RestockException(
+                '${_linePrefix(firstLine[productId])}المنتج ($productId) غير موجود.');
+          }
+          final data = snap.data()!;
+          final stock = data['stock'] as Map? ?? const {};
+          grouped[productId]!.forEach((color, sizes) {
+            for (final size in sizes.keys) {
+              final sizesOfColor = stock[color];
+              if (sizesOfColor is! Map || !sizesOfColor.containsKey(size)) {
+                throw RestockException(
+                    '${_linePrefix(firstLine['$productId|$color|$size'])}'
+                    'المقاس $size ($color) غير موجود في «${data['name'] ?? productId}».');
+              }
+            }
+          });
+        }
+
+        // ---- writes: one update per product ----
+        final now = DateTime.now().toIso8601String();
+        grouped.forEach((productId, colors) {
+          tx.update(_db.collection('products').doc(productId), {
+            for (final c in colors.entries)
+              for (final s in c.value.entries)
+                'stock.${c.key}.${s.key}': FieldValue.increment(s.value),
+            'updatedAt': now,
+          });
+        });
+      });
+    } on RestockException catch (e) {
+      isRestocking = false;
+      emit(InventoryError(e.message));
+      return;
+    } catch (e) {
+      isRestocking = false;
+      emit(InventoryError(e.toString()));
+      return;
+    }
+
+    // Applied. Refresh the touched products so the products screen and the
+    // dashboard show the new quantities; a failed re-read doesn't undo that.
+    final restocked = <RestockedVariant>[];
+    try {
+      final docs = await Future.wait(
+          grouped.keys.map((id) => _db.collection('products').doc(id).get()));
+      for (final doc in docs) {
+        if (!doc.exists) continue;
+        final updated = ProductModel.fromMap(doc.data()!);
+        final i = products.indexWhere((p) => p.id == updated.id);
+        if (i >= 0) {
+          products[i] = updated;
+        } else {
+          products.add(updated);
+        }
+        grouped[updated.id]!.forEach((color, sizes) {
+          for (final size in sizes.keys) {
+            restocked.add(RestockedVariant(
+                updated.id, color, size, updated.stock[color]?[size] ?? 0));
+          }
+        });
+      }
+    } catch (_) {}
+    lastRestock = restocked;
+
+    final pieces = entries.fold<int>(0, (n, e) => n + e.qty);
+    final variants = grouped.values
+        .fold<int>(0, (n, colors) => n + colors.values.fold<int>(0, (m, s) => m + s.length));
+
+    for (final r in restockRows) {
+      r.dispose();
+    }
+    restockRows
+      ..clear()
+      ..add(RestockRowControllers());
+    restockProduct = null;
+    isRestocking = false;
+    emit(InventoryLoaded(products));
+    emit(InventorySuccess('تمت إضافة $pieces قطعة إلى $variants منتج/مقاس'));
   }
 
+  /// Turns the restock form into entries. Fully empty rows are skipped; a
+  /// partly filled or invalid row aborts with its line number (never
+  /// silently dropped).
   Future<void> submitRestock() async {
+    if (isRestocking) return;
     if (restockProduct == null) {
       emit(InventoryError('اختر منتجًا أولًا.'));
       return;
     }
 
-    final Map<String, Map<String, int>> additions = {};
-    for (final r in restockRows) {
+    final entries = <RestockEntry>[];
+    for (var i = 0; i < restockRows.length; i++) {
+      final r = restockRows[i];
       final color = r.colorCtrl.text.trim();
       final size = r.sizeCtrl.text.trim();
-      final qty = int.tryParse(normalizeDigits(r.qtyCtrl.text.trim())) ?? 0;
-      if (color.isEmpty || size.isEmpty || qty <= 0) continue;
-      additions.putIfAbsent(color, () => {});
-      additions[color]![size] = (additions[color]![size] ?? 0) + qty;
+      final qtyText = normalizeDigits(r.qtyCtrl.text.trim());
+      if (color.isEmpty && size.isEmpty && qtyText.isEmpty) continue;
+      final line = i + 1;
+      if (color.isEmpty) {
+        emit(InventoryError('السطر $line: اختر اللون.'));
+        return;
+      }
+      if (size.isEmpty) {
+        emit(InventoryError('السطر $line: اختر المقاس.'));
+        return;
+      }
+      final qty = int.tryParse(qtyText);
+      if (qty == null || qty < 1) {
+        emit(InventoryError('السطر $line: الكمية يجب أن تكون عددًا صحيحًا من 1 فأكثر.'));
+        return;
+      }
+      entries.add(RestockEntry(
+        productId: restockProduct!.id,
+        color: color,
+        size: size,
+        qty: qty,
+        line: line,
+      ));
     }
 
-    await addStockQuantities(productId: restockProduct!.id, additions: additions);
+    await applyRestock(entries);
   }
 
   // ---------------------------------------------------------------------

@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 
 class OrderSuccessPage extends StatelessWidget {
-  const OrderSuccessPage({super.key});
+  /// The order's final amount as priced by the server (null if unknown).
+  final double? total;
+  const OrderSuccessPage({super.key, this.total});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -18,6 +20,14 @@ class OrderSuccessPage extends StatelessWidget {
               Text('تم استلام طلبك!', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               const Text('راح نتواصل معك قريبًا لتأكيد الطلب وتفاصيل التوصيل.', textAlign: TextAlign.center),
+              if (total != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'الإجمالي المستحق: ${total!.toStringAsFixed(2)} د.أ',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: () {

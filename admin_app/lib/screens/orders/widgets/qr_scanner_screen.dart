@@ -66,3 +66,62 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     );
   }
 }
+
+class QrScanDialog extends StatefulWidget {
+  const QrScanDialog({super.key});
+
+  @override
+  State<QrScanDialog> createState() => _QrScanDialogState();
+}
+
+class _QrScanDialogState extends State<QrScanDialog> {
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.normal,
+    facing: CameraFacing.back,
+    // بدون formats: يقرأ كل الأنواع (QR وCode128 وEAN وغيرها)
+  );
+  bool _handled = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_handled) return;
+    for (final b in capture.barcodes) {
+      debugPrint('SCAN: ${b.format} -> ${b.rawValue}');
+      final v = b.rawValue?.trim();
+      if (v != null && v.isNotEmpty) {
+        _handled = true;
+        Navigator.of(context).pop(v);
+        return;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('امسح رمز QR'),
+      content: SizedBox(
+        width: 280,
+        height: 280,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: MobileScanner(
+            controller: _controller,
+            onDetect: _onDetect,
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('إلغاء'),
+        ),
+      ],
+    );
+  }
+}

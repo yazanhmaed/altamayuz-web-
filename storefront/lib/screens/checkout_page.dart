@@ -24,11 +24,22 @@ class CheckoutPage extends StatefulWidget {
   State<CheckoutPage> createState() => _CheckoutPageState();
 }
 
+/// Dropdown value for "أخرى" — never sent; the typed city is.
+const _kOtherCity = '__other__';
+
+/// Letters (any script, incl. Arabic and its marks), digits, spaces, dash, dot.
+final _customCityChars = RegExp(r'^[\p{L}\p{M}\p{Nd}\s.\-]+$', unicode: true);
+final _hasLetter = RegExp(r'\p{L}', unicode: true);
+
 class _CheckoutPageState extends State<CheckoutPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   String? _city;
+
+  /// The city typed under "أخرى" (shown only while [_city] is [_kOtherCity]).
+  final _customCityCtrl = TextEditingController();
+  final _customCityFocus = FocusNode();
   final _areaCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
   bool _submitting = false;
@@ -84,9 +95,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // Network hiccup reading config — proceed with no cart discount rather
       // than blocking checkout. The server still applies any real discount.
     });
-    analytics.logEvent(
-      name: 'begin_checkout',
-      parameters: {'value': _total, 'currency': 'JOD'},
+    analytics.logBeginCheckout(
+      value: _total,
+      currency: 'JOD',
+      items: _analyticsItems(),
     );
   }
 
@@ -95,10 +107,24 @@ class _CheckoutPageState extends State<CheckoutPage> {
     promotionsRepository.removeListener(_onPromotionsChanged);
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
+    _customCityCtrl.dispose();
+    _customCityFocus.dispose();
     _areaCtrl.dispose();
     _streetCtrl.dispose();
     super.dispose();
   }
+
+  /// Cart lines as analytics items, with the winning promotion when any.
+  List<AnalyticsEventItem> _analyticsItems() => _items
+      .map((l) => AnalyticsEventItem(
+            itemId: l.product.id,
+            itemName: l.product.name,
+            price: l.product.effectivePrice,
+            quantity: l.quantity,
+            promotionId: l.product.activePromotion?.id,
+            promotionName: l.product.activePromotion?.name,
+          ))
+      .toList();
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -106,10 +132,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
     try {
       final callable =
           FirebaseFunctions.instance.httpsCallable('submitPublicOrder');
-      await callable.call({
+      final result = await callable.call({
         'customerName': _nameCtrl.text.trim(),
         'customerPhone': jordanPhoneToE164(_phoneCtrl.text),
-        'address': _city!,
+        'address': _city == _kOtherCity
+            ? _customCityCtrl.text.trim().replaceAll(RegExp(r'\s+'), ' ')
+            : _city!,
         'area': _areaCtrl.text.trim(),
         'street': _streetCtrl.text.trim(),
         'marketingConsent': _marketingConsent,
@@ -119,22 +147,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   'color': l.variant.color,
                   'size': l.size,
                   'quantity': l.quantity,
+                  // Information only: the server re-prices every item.
+                  'unitPrice': l.product.effectivePrice,
                 })
             .toList(),
       });
+      // The server's price is final (a promotion may have started or ended
+      // since the page was opened).
+      final data = result.data;
+      final serverTotal = data is Map && data['total'] is num
+          ? (data['total'] as num).toDouble()
+          : null;
+      final total = serverTotal ?? _total - _discount.amount;
 
       analytics.logPurchase(
-        value: _total - _discount.amount,
+        value: total,
         currency: 'JOD',
-        items: _items
-            .map((l) => AnalyticsEventItem(
-                  itemId: l.product.id,
-                  itemName: l.product.name,
-                  quantity: l.quantity,
-                  promotionId: l.product.activePromotion?.id,
-                  promotionName: l.product.activePromotion?.name,
-                ))
-            .toList(),
+        items: _analyticsItems(),
       );
 
       if (widget.buyNowItem == null) {
@@ -142,7 +171,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
       if (!mounted) return;
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const OrderSuccessPage()),
+        MaterialPageRoute(builder: (_) => OrderSuccessPage(total: serverTotal)),
       );
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
@@ -402,32 +431,84 @@ class _CheckoutPageState extends State<CheckoutPage> {
               final isWide = constraints.maxWidth > 450;
               return Flex(
                 direction: isWide ? Axis.horizontal : Axis.vertical,
+                // Side by side: keep the area field level with the dropdown
+                // when the custom-city field appears under it.
+                crossAxisAlignment:
+                    isWide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
                 children: [
                   Expanded(
                     flex: isWide ? 1 : 0,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _city,
-                      isExpanded: true,
-                      menuMaxHeight: 300,
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
-                      hint: const Text('اختر المحافظة'),
-                      decoration: InputDecoration(
-                        labelText: 'المحافظة / المدينة',
-                        prefixIcon: const Icon(Icons.location_city_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          initialValue: _city,
+                          isExpanded: true,
+                          menuMaxHeight: 300,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          hint: const Text('اختر المحافظة'),
+                          decoration: InputDecoration(
+                            labelText: 'المحافظة / المدينة',
+                            prefixIcon: const Icon(Icons.location_city_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          items: [
+                            for (final g in kJordanGovernorates)
+                              DropdownMenuItem(value: g, child: Text(g)),
+                            const DropdownMenuItem(
+                              value: _kOtherCity,
+                              child: Text('أخرى (اكتب المحافظة / المدينة)'),
+                            ),
+                          ],
+                          // Dismiss the keyboard before the menu opens so it
+                          // isn't squeezed/covered on mobile web.
+                          onTap: () => FocusScope.of(context).unfocus(),
+                          onChanged: (v) {
+                            setState(() {
+                              _city = v;
+                              if (v != _kOtherCity) _customCityCtrl.clear();
+                            });
+                            // Focusing scrolls the revealed field into view.
+                            if (v == _kOtherCity) {
+                              WidgetsBinding.instance.addPostFrameCallback(
+                                  (_) => _customCityFocus.requestFocus());
+                            }
+                          },
+                          validator: (v) =>
+                              v == null ? 'الرجاء اختيار المحافظة' : null,
                         ),
-                      ),
-                      items: [
-                        for (final g in kJordanGovernorates)
-                          DropdownMenuItem(value: g, child: Text(g)),
+                        if (_city == _kOtherCity) ...[
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _customCityCtrl,
+                            focusNode: _customCityFocus,
+                            maxLength: 40,
+                            textInputAction: TextInputAction.next,
+                            autovalidateMode: AutovalidateMode.onUserInteraction,
+                            decoration: InputDecoration(
+                              labelText: 'اكتب المحافظة أو المدينة',
+                              prefixIcon: const Icon(Icons.edit_location_alt_outlined),
+                              counterText: '',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            validator: (v) {
+                              final t = (v ?? '').trim();
+                              if (t.isEmpty) return 'مطلوب';
+                              if (t.length < 2) return 'حرفان على الأقل';
+                              if (!_customCityChars.hasMatch(t) ||
+                                  !_hasLetter.hasMatch(t)) {
+                                return 'استخدم الحروف والأرقام والمسافات فقط';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
                       ],
-                      // Dismiss the keyboard before the menu opens so it
-                      // isn't squeezed/covered on mobile web.
-                      onTap: () => FocusScope.of(context).unfocus(),
-                      onChanged: (v) => setState(() => _city = v),
-                      validator: (v) =>
-                          v == null ? 'الرجاء اختيار المحافظة' : null,
                     ),
                   ),
                   SizedBox(

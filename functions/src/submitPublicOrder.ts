@@ -86,6 +86,7 @@ function computeCartDiscount(
 // Must match kJordanGovernorates in storefront/ and admin_app/
 // lib/config/jordan_governorates.dart exactly. Only public orders are checked;
 // the admin app writes to Firestore directly and old orders are untouched.
+// The checkout's "أخرى" option also allows a typed city (see sanitizeCity).
 const JORDAN_GOVERNORATES = new Set([
   "عمّان",
   "إربد",
@@ -155,6 +156,26 @@ async function loadRunningPromotions(
   }
   return list;
 }
+// The order's `address` (governorate/city): one of JORDAN_GOVERNORATES, or
+// free text typed under "أخرى". Control characters and `<`/`>` are stripped,
+// whitespace collapsed; the result must be 2–40 characters and contain at
+// least one letter. Returns null when invalid. Only ever stored as a field
+// value — never used in a query or document ID.
+export function sanitizeCity(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const value = Array.from(raw)
+    .filter((c) => {
+      const code = c.codePointAt(0) ?? 0;
+      return code >= 0x20 && !(code >= 0x7f && code <= 0x9f) && c !== "<" && c !== ">";
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (JORDAN_GOVERNORATES.has(value)) return value;
+  if (value.length < 2 || value.length > 40) return null;
+  if (!/\p{L}/u.test(value)) return null;
+  return value;
+}
 
 export const submitPublicOrder = onCall<RequestData>(async (request) => {
   const { customerName, address, area, street, items } = request.data;
@@ -175,7 +196,8 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
   if (!customerPhone) {
     throw new HttpsError("invalid-argument", "رقم الهاتف غير صحيح");
   }
-  if (!JORDAN_GOVERNORATES.has(address)) {
+  const city = sanitizeCity(address);
+  if (!city) {
     throw new HttpsError("invalid-argument", "المحافظة غير صحيحة");
   }
   for (const it of items) {
@@ -223,6 +245,9 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
   const orderRef = db.collection("orders").doc();
   const customerRef = db.collection("customers").doc(customerPhone);
 
+  // The server-priced net total, returned so the success screen shows the
+  // real amount even when it differs from what the client displayed.
+  let finalTotal = 0;
   await db.runTransaction(async (tx) => {
     const need: Record<string, Record<string, Record<string, number>>> = {};
     for (const it of items) {
@@ -330,12 +355,13 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
     // `total` now means the NET amount owed (subtotal minus the cart discount)
     // — the only figure that matters for payment/delivery.
     const total = subtotal - cartDiscountAmount;
+    finalTotal = total;
 
     tx.set(orderRef, {
       id: orderRef.id,
       customerName,
       customerPhone,
-      address,
+      address: city,
       area,
       street,
       destination: "",
@@ -359,7 +385,7 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
       tx.set(customerRef, {
         name: customerName,
         phone: customerPhone,
-        city: address,
+        city,
         area,
         street: street ?? "",
         firstOrderAt: now,
@@ -377,7 +403,7 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
     } else {
       tx.update(customerRef, {
         name: customerName,
-        city: address,
+        city,
         area,
         street: street ?? "",
         lastOrderAt: now,
@@ -391,5 +417,5 @@ export const submitPublicOrder = onCall<RequestData>(async (request) => {
     }
   });
 
-  return { orderId: orderRef.id };
+  return { orderId: orderRef.id, total: finalTotal };
 });

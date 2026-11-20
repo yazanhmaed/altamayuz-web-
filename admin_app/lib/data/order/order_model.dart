@@ -132,6 +132,52 @@ class OrderItem {
   }
 }
 
+/// One entry of an order's `editHistory` (newest last, max
+/// [kMaxOrderEditHistory]), written by the owner's "تعديل" action.
+class OrderEdit {
+  final DateTime at;
+  final String by;
+
+  /// Changed field keys, e.g. `customerName`, `items`, `total`.
+  final List<String> fields;
+  final int itemsBefore;
+  final int itemsAfter;
+  final double? totalBefore;
+  final double? totalAfter;
+
+  const OrderEdit({
+    required this.at,
+    required this.by,
+    required this.fields,
+    required this.itemsBefore,
+    required this.itemsAfter,
+    this.totalBefore,
+    this.totalAfter,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'at': Timestamp.fromDate(at),
+    'by': by,
+    'fields': fields,
+    'itemsBefore': itemsBefore,
+    'itemsAfter': itemsAfter,
+    'totalBefore': totalBefore,
+    'totalAfter': totalAfter,
+  };
+
+  factory OrderEdit.fromMap(Map<String, dynamic> map) => OrderEdit(
+    at: _parseDate(map['at']),
+    by: map['by'] as String? ?? 'admin',
+    fields: List<String>.from(map['fields'] as List? ?? const []),
+    itemsBefore: (map['itemsBefore'] as num?)?.toInt() ?? 0,
+    itemsAfter: (map['itemsAfter'] as num?)?.toInt() ?? 0,
+    totalBefore: (map['totalBefore'] as num?)?.toDouble(),
+    totalAfter: (map['totalAfter'] as num?)?.toDouble(),
+  );
+}
+
+const int kMaxOrderEditHistory = 20;
+
 class OrderModel {
   final String id;
   final String customerName;
@@ -163,6 +209,13 @@ class OrderModel {
   final int? cartDiscountTierMinQuantity;
   final double? total;
 
+  /// Set by the owner's edit action (status changes also bump `updatedAt`).
+  /// Read-only here: never part of [toMap], so creating an order can't wipe
+  /// them; the edit transaction writes them directly.
+  final DateTime? updatedAt;
+  final String? updatedBy;
+  final List<OrderEdit> editHistory;
+
   OrderModel({
     required this.id,
     required this.customerName,
@@ -182,7 +235,16 @@ class OrderModel {
     this.cartDiscountAmount,
     this.cartDiscountTierMinQuantity,
     this.total,
+    this.updatedAt,
+    this.updatedBy,
+    this.editHistory = const [],
   });
+
+  /// Items (add/remove/change) may be edited only while nothing has been
+  /// delivered or returned and the order isn't finalized.
+  bool get itemsEditable =>
+      (status == OrderStatus.pending || status == OrderStatus.shipped) &&
+      items.every((i) => i.status == ItemStatus.pending);
 
   /// True when a cart-wide quantity discount actually reduced this order.
   bool get hasCartDiscount =>
@@ -207,6 +269,9 @@ class OrderModel {
     double? cartDiscountAmount,
     int? cartDiscountTierMinQuantity,
     double? total,
+    DateTime? updatedAt,
+    String? updatedBy,
+    List<OrderEdit>? editHistory,
   }) {
     return OrderModel(
       id: id ?? this.id,
@@ -228,6 +293,9 @@ class OrderModel {
       cartDiscountTierMinQuantity:
           cartDiscountTierMinQuantity ?? this.cartDiscountTierMinQuantity,
       total: total ?? this.total,
+      updatedAt: updatedAt ?? this.updatedAt,
+      updatedBy: updatedBy ?? this.updatedBy,
+      editHistory: editHistory ?? this.editHistory,
     );
   }
 
@@ -284,6 +352,12 @@ class OrderModel {
       cartDiscountTierMinQuantity:
           (map['cartDiscountTierMinQuantity'] as num?)?.toInt(),
       total: (map['total'] as num?)?.toDouble(),
+      updatedAt: map['updatedAt'] == null ? null : _parseDate(map['updatedAt']),
+      updatedBy: map['updatedBy'] as String?,
+      editHistory: (map['editHistory'] as List? ?? const [])
+          .whereType<Map>()
+          .map((e) => OrderEdit.fromMap(Map<String, dynamic>.from(e)))
+          .toList(),
     );
   }
 }

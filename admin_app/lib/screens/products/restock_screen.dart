@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../cubit/dashboard/dashboard_cubit.dart';
 import '../../cubit/inventory/inventory_cubit.dart';
 import '../../cubit/inventory/inventory_state.dart';
 import '../../data/product/product_model.dart';
@@ -30,6 +31,16 @@ class _RestockScreenState extends State<RestockScreen> {
       body: BlocConsumer<InventoryCubit, InventoryState>(
         listener: (context, state) {
           if (state is InventorySuccess) {
+            // Keep the dashboard's low-stock list in step with the new stock.
+            final dashboard = context.read<DashboardCubit>();
+            for (final v in context.read<InventoryCubit>().lastRestock) {
+              dashboard.applyRestock(
+                productId: v.productId,
+                color: v.color,
+                size: v.size,
+                newQuantity: v.quantity,
+              );
+            }
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message)));
             Navigator.of(context).pop();
           } else if (state is InventoryError) {
@@ -37,7 +48,7 @@ class _RestockScreenState extends State<RestockScreen> {
           }
         },
         builder: (context, state) {
-        final isSaving = state is InventoryLoading;
+        final isSaving = state is InventoryLoading || cubit.isRestocking;
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [

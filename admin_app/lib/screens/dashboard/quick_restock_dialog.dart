@@ -79,12 +79,9 @@ class _QuickRestockDialogState extends State<_QuickRestockDialog> {
       _saveError = null;
     });
 
-    await inventory.addStockQuantities(
-      productId: e.productId,
-      additions: {
-        e.color: {e.size: qty},
-      },
-    );
+    await inventory.applyRestock([
+      RestockEntry(productId: e.productId, color: e.color, size: e.size, qty: qty),
+    ]);
     if (!mounted) return;
 
     final state = inventory.state;
@@ -97,7 +94,7 @@ class _QuickRestockDialogState extends State<_QuickRestockDialog> {
       return;
     }
 
-    // addStockQuantities re-reads the product after the increment, so take
+    // applyRestock re-reads the product after the increment, so take
     // the server's quantity (which includes any concurrent change).
     int newQty = e.quantity + qty;
     for (final p in inventory.products) {
