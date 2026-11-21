@@ -46,6 +46,16 @@ service cloud.firestore {
       allow read, write: if isOwner();
     }
 
+    // Stocktake (جرد) audit log and its per-product before/after changes,
+    // used to undo a stocktake. Owner-only.
+    match /stocktakes/{id} {
+      allow read, write: if isOwner();
+
+      match /changes/{productId} {
+        allow read, write: if isOwner();
+      }
+    }
+
     // Manual WhatsApp offer campaigns and who received each one. Owner-only.
     match /campaigns/{id} {
       allow read, write: if isOwner();

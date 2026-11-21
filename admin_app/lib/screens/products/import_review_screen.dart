@@ -6,6 +6,82 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../cubit/inventory/inventory_cubit.dart';
 import '../../cubit/inventory/inventory_state.dart';
+import '../../cubit/stocktake/stocktake_cubit.dart';
+
+/// Before creating anything, warns when products with the same name already
+/// exist (the cause of duplicate products when a count file is re-imported)
+/// and offers stocktake mode instead. Creating anyway needs an explicit tap.
+Future<void> _confirmWithDuplicateCheck(BuildContext context) async {
+  final cubit = context.read<InventoryCubit>();
+  final List<String> conflicts;
+  try {
+    conflicts = await cubit.existingNameConflicts();
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('تعذّر التحقق من المنتجات الموجودة: $e')));
+    }
+    return;
+  }
+  if (!context.mounted) return;
+  if (conflicts.isEmpty) {
+    cubit.confirmImport();
+    return;
+  }
+
+  final choice = await showDialog<String>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: const Text('منتجات موجودة مسبقاً'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('هذه المنتجات موجودة مسبقاً:'),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [for (final n in conflicts) Text('• $n')],
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text('هل تريد التحويل إلى وضع الجرد؟'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          onPressed: () => Navigator.pop(context, 'create'),
+          child: const Text('إنشاء منتجات جديدة على أي حال'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, 'stocktake'),
+          child: const Text('التحويل إلى وضع الجرد'),
+        ),
+      ],
+    ),
+  );
+  if (!context.mounted) return;
+  if (choice == 'create') {
+    cubit.confirmImport();
+  } else if (choice == 'stocktake' && cubit.lastImportBytes != null) {
+    // The products screen opens the stocktake review once parsing ends.
+    context
+        .read<StocktakeCubit>()
+        .loadFile(cubit.lastImportBytes!, cubit.lastImportFileName);
+    cubit.cancelImport();
+    Navigator.of(context).pop();
+  }
+}
 
 /// Review step shown after [InventoryCubit.pickAndParseExcelForImport]
 /// parses an Excel file in memory (no Firestore/Storage writes yet). Shows
@@ -107,7 +183,7 @@ class ImportReviewScreen extends StatelessWidget {
                         child: FilledButton(
                           onPressed: isSaving || items.isEmpty
                               ? null
-                              : () => cubit.confirmImport(),
+                              : () => _confirmWithDuplicateCheck(context),
                           child: isSaving
                               ? const SizedBox(
                                   width: 20,

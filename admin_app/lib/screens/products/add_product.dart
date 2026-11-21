@@ -17,7 +17,10 @@ const _newCategorySentinel = '__new_category__';
 
 class AddProductScreen extends StatefulWidget {
   final ProductModel? product;
-  const AddProductScreen({super.key, this.product});
+
+  /// The form was already filled via [InventoryCubit.prefillNewProduct].
+  final bool prefilled;
+  const AddProductScreen({super.key, this.product, this.prefilled = false});
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -32,7 +35,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     final cubit = context.read<InventoryCubit>();
     if (widget.product != null) {
       cubit.fillFormForEdit(widget.product!);
-    } else {
+    } else if (!widget.prefilled) {
       cubit.clearForm();
     }
   }

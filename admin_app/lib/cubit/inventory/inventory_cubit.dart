@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -11,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../data/product/product_model.dart';
 import '../../utils/arabic_digits.dart';
+import '../../utils/stocktake_matching.dart' show normalizeKey;
 import 'inventory_state.dart';
 
 /// One quantity field, positioned at some index that corresponds to the
@@ -190,6 +192,11 @@ class InventoryCubit extends Cubit<InventoryState> {
   // ---- Excel import review state ----
   List<PendingImportProduct> pendingImportItems = [];
   List<String> pendingImportErrors = [];
+
+  /// The last file picked for a "new products" import, kept so the review
+  /// can switch it to stocktake mode without picking it again.
+  Uint8List? lastImportBytes;
+  String lastImportFileName = '';
 
   Future<void> fetchProducts({bool refresh = false}) async {
     if (_hasFetched && !refresh) {
@@ -828,6 +835,8 @@ class InventoryCubit extends Cubit<InventoryState> {
         return;
       }
 
+      lastImportBytes = result.files.single.bytes!;
+      lastImportFileName = result.files.single.name;
       final excelFile = xls.Excel.decodeBytes(result.files.single.bytes!);
       final sheet = excelFile.tables[excelFile.tables.keys.first]!;
       final Map<String, _ImportedProduct> parsed = {};
@@ -920,10 +929,34 @@ class InventoryCubit extends Cubit<InventoryState> {
     emit(InventoryFormChanged());
   }
 
+  /// Names of pending products that would be CREATED although a product
+  /// with the same (normalized) name already exists under another id.
+  Future<List<String>> existingNameConflicts() async {
+    final snap = await _db.collection('products').get();
+    final existing = {
+      for (final d in snap.docs) normalizeKey(d.data()['name'] as String? ?? ''),
+    };
+    return [
+      for (final item in pendingImportItems)
+        if (item.isNew && existing.contains(normalizeKey(item.name))) item.name,
+    ];
+  }
+
+  static String _uuidV4() {
+    final rnd = Random.secure();
+    final b = List<int>.generate(16, (_) => rnd.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    final hex = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-'
+        '${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
   Future<void> confirmImport() async {
     try {
       emit(InventoryLoading());
       final nowIso = DateTime.now().toIso8601String();
+      final batchId = _uuidV4();
       var successCount = 0;
 
       for (final item in pendingImportItems) {
@@ -959,6 +992,8 @@ class InventoryCubit extends Cubit<InventoryState> {
           updateData['createdAt'] = nowIso;
           updateData['lowStockThreshold'] = item.threshold ?? 1;
           updateData['category'] ??= 'عام';
+          updateData['importBatchId'] = batchId;
+          updateData['importedAt'] = nowIso;
         } else if (item.threshold != null) {
           updateData['lowStockThreshold'] = item.threshold;
         }
@@ -974,6 +1009,78 @@ class InventoryCubit extends Cubit<InventoryState> {
     } catch (e) {
       emit(InventoryError('فشل تأكيد الاستيراد: $e'));
     }
+  }
+
+  /// Products created by the most recent import (by `importedAt`), or an
+  /// empty list when no imported product is left.
+  Future<List<ProductModel>> lastImportBatch() async {
+    final latest = await _db
+        .collection('products')
+        .orderBy('importedAt', descending: true)
+        .limit(1)
+        .get();
+    if (latest.docs.isEmpty) return const [];
+    final batchId = latest.docs.first.data()['importBatchId'];
+    if (batchId == null) return const [];
+    final snap = await _db
+        .collection('products')
+        .where('importBatchId', isEqualTo: batchId)
+        .get();
+    return snap.docs.map((d) => ProductModel.fromMap({...d.data(), 'id': d.id})).toList();
+  }
+
+  Future<void> deleteImportBatch(List<ProductModel> batch) async {
+    emit(InventoryLoading());
+    try {
+      final writes = _db.batch();
+      for (final p in batch) {
+        writes.delete(_db.collection('products').doc(p.id));
+      }
+      await writes.commit();
+      final ids = batch.map((p) => p.id).toSet();
+      products.removeWhere((p) => ids.contains(p.id));
+      emit(InventoryLoaded(products));
+      emit(InventorySuccess('تم حذف ${batch.length} منتج من آخر استيراد.'));
+    } catch (e) {
+      emit(InventoryError('فشل حذف آخر استيراد: $e'));
+    }
+  }
+
+  /// Fills the add-product form for a product found only in a stocktake
+  /// file. [stock] is color -> size -> quantity.
+  void prefillNewProduct({
+    required String name,
+    required Map<String, Map<String, int>> stock,
+    double? price,
+    String? category,
+    int? threshold,
+  }) {
+    clearForm();
+    nameCtrl.text = name;
+    if (price != null) priceCtrl.text = price.toString();
+    if (category != null && category.isNotEmpty) categoryCtrl.text = category;
+    if (threshold != null) lowStockCtrl.text = threshold.toString();
+
+    final sizes = {for (final s in stock.values) ...s.keys}.toList()..sort();
+    if (sizes.isEmpty || stock.isEmpty) return;
+    for (final c in globalSizeCtrls) {
+      c.dispose();
+    }
+    globalSizeCtrls
+      ..clear()
+      ..addAll(sizes.map((s) => TextEditingController(text: s)));
+    for (final row in colorRows) {
+      row.dispose();
+    }
+    colorRows.clear();
+    stock.forEach((color, qtys) {
+      final row = ColorFormRow(color: color);
+      for (final size in sizes) {
+        row.qtyCtrls.add(SizeQtyRow(qty: (qtys[size] ?? 0).toString()));
+      }
+      colorRows.add(row);
+    });
+    emit(InventoryFormChanged());
   }
 
   Future<void> exportProductsToExcel() async {
@@ -993,6 +1100,7 @@ class InventoryCubit extends Cubit<InventoryState> {
         xls.TextCellValue('السعر'),
         xls.TextCellValue('التصنيف'),
         xls.TextCellValue('حد التنبيه'),
+        xls.TextCellValue('معرّف المنتج'),
       ]);
 
       for (final doc in snap.docs) {
@@ -1014,6 +1122,7 @@ class InventoryCubit extends Cubit<InventoryState> {
               xls.TextCellValue(price),
               xls.TextCellValue(category),
               xls.TextCellValue(threshold),
+              xls.TextCellValue(doc.id),
             ]);
           });
         });
