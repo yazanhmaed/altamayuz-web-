@@ -126,6 +126,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
       // Scaffold.bottomSheet (the CartBar), so it won't collide with it.
       floatingActionButton: const WhatsAppFab(),
       appBar: AppBar(
+        leading: Image.asset('assets/icons/logo.png', width: 32, height: 32),
         title: Text('التميز للجلود الطبيعية المميزة',
             style: Theme.of(context).textTheme.headlineSmall),
         actions: [

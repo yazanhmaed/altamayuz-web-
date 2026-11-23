@@ -1,5 +1,6 @@
 import 'dart:developer';
 
+import 'package:altamayuz_storefront/config/store_info.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
@@ -433,8 +434,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 direction: isWide ? Axis.horizontal : Axis.vertical,
                 // Side by side: keep the area field level with the dropdown
                 // when the custom-city field appears under it.
-                crossAxisAlignment:
-                    isWide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+                crossAxisAlignment: isWide
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.center,
                 children: [
                   Expanded(
                     flex: isWide ? 1 : 0,
@@ -450,7 +452,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                           hint: const Text('اختر المحافظة'),
                           decoration: InputDecoration(
                             labelText: 'المحافظة / المدينة',
-                            prefixIcon: const Icon(Icons.location_city_outlined),
+                            prefixIcon:
+                                const Icon(Icons.location_city_outlined),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -487,10 +490,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             focusNode: _customCityFocus,
                             maxLength: 40,
                             textInputAction: TextInputAction.next,
-                            autovalidateMode: AutovalidateMode.onUserInteraction,
+                            autovalidateMode:
+                                AutovalidateMode.onUserInteraction,
                             decoration: InputDecoration(
                               labelText: 'اكتب المحافظة أو المدينة',
-                              prefixIcon: const Icon(Icons.edit_location_alt_outlined),
+                              prefixIcon:
+                                  const Icon(Icons.edit_location_alt_outlined),
                               counterText: '',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -549,24 +554,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ),
           const SizedBox(height: 12),
 
-          // Marketing opt-in — optional, unchecked by default.
-          CheckboxListTile(
-            value: _marketingConsent,
-            onChanged: _submitting
-                ? null
-                : (v) => setState(() => _marketingConsent = v ?? false),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('أرغب بتلقي العروض والتخفيضات الجديدة'),
-            subtitle: Text(
-              'يمكنك إلغاء الاشتراك في أي وقت',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
           // Informational Badges
           Container(
             padding: const EdgeInsets.all(16),
@@ -581,6 +568,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ),
             child: Column(
               children: [
+                Row(
+                  children: [
+                    Icon(Icons.local_shipping_outlined,
+                        color: theme.colorScheme.primary),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        deliveryPolicyText,
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20),
                 Row(
                   children: [
                     Icon(Icons.payments_outlined,
@@ -603,7 +604,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     const Expanded(
                       child: Text(
                         'في حال الإرجاع، يتم دفع بدل توصيل (دينارين فقط)',
-                        style: TextStyle(fontSize: 13),
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -614,6 +616,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
           const SizedBox(height: 24),
 
+          // Marketing opt-in — optional, unchecked by default.
+          CheckboxListTile(
+            value: _marketingConsent,
+            onChanged: _submitting
+                ? null
+                : (v) => setState(() => _marketingConsent = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('أرغب بتلقي العروض والتخفيضات الجديدة'),
+            subtitle: Text(
+              'يمكنك إلغاء الاشتراك في أي وقت',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
             'نحتفظ باسمك ورقمك وعنوانك لأغراض التوصيل والتواصل بخصوص طلباتك',
             style: theme.textTheme.bodySmall?.copyWith(
